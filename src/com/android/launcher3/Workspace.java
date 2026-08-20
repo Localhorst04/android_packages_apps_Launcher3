@@ -130,6 +130,7 @@ import com.android.launcher3.statemanager.StateManager.StateHandler;
 import com.android.launcher3.statemanager.StateManager.StateListener;
 import com.android.launcher3.states.StateAnimationConfig;
 import com.android.launcher3.touch.WorkspaceTouchListener;
+import com.android.launcher3.util.CellAndSpan;
 import com.android.launcher3.util.EdgeEffectCompat;
 import com.android.launcher3.util.Executors;
 import com.android.launcher3.util.IntArray;
@@ -3399,6 +3400,35 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             }
             return false;
         });
+    }
+
+    public boolean resizeFolder(FolderIcon folderIcon, CellAndSpan target, int[] direction) {
+        if (folderIcon == null
+                || target == null
+                || direction == null
+                || direction.length != 2) return false;
+
+        CellLayout cellLayout = getParentCellLayoutForView(folderIcon);
+        if (cellLayout == null) return false;
+
+        if (!(folderIcon.getTag() instanceof FolderInfo folderInfo)) return false;
+        if (folderInfo.container != CONTAINER_DESKTOP) return false;
+
+        int oldMinSpanX = folderInfo.minSpanX;
+        int oldMinSpanY = folderInfo.minSpanY;
+        folderInfo.minSpanX = target.spanX;
+        folderInfo.minSpanY = target.spanY;
+
+        boolean resized = false;
+        try {
+            resized = cellLayout.resizeView(folderIcon, target, direction);
+            return resized;
+        } finally {
+            if (!resized) {
+                folderInfo.minSpanX = oldMinSpanX;
+                folderInfo.minSpanY = oldMinSpanY;
+            }
+        }
     }
 
     public boolean isDropEnabled() {

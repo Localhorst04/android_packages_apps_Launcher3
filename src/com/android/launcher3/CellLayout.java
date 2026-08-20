@@ -1637,6 +1637,76 @@ public class CellLayout extends ViewGroup {
         }
     }
 
+    boolean resizeView(View view, CellAndSpan target, int[] direction) {
+        if (!targetIsValid(target)) return false;
+
+        CellLayoutLayoutParams lp = (CellLayoutLayoutParams) view.getLayoutParams();
+        CellAndSpan oldCellAndSpan = new CellAndSpan(
+                lp.getCellX(),
+                lp.getCellY(),
+                lp.cellHSpan,
+                lp.cellVSpan);
+        markCellsAsUnoccupiedForView(view);
+
+        boolean committed = false;
+        try {
+            setCellAndSpan(lp, target);
+
+            int[] resizeDirection = direction.clone();
+            committed = createAreaForResize(
+                target.cellX,
+                target.cellY,
+                target.spanX,
+                target.spanY,
+                view,
+                resizeDirection,
+                true);
+            return committed;
+
+        } finally {
+            if (!committed) {
+                setCellAndSpan(lp, oldCellAndSpan);
+                revertTempState();
+                markCellsAsOccupiedForView(view);
+            }
+            setUseTempCoords(false);
+
+            // Multipage seam simulation restores stale occupancy
+            // rebuild it from committed children.
+            if (committed) {
+                rebuildOccupiedFromChildren();
+            }
+        }
+    }
+
+    private void setCellAndSpan(CellLayoutLayoutParams lp, CellAndSpan toCellAndSpan) {
+        lp.setTmpCellX(toCellAndSpan.cellX);
+        lp.setTmpCellY(toCellAndSpan.cellY);
+        lp.cellHSpan = toCellAndSpan.spanX;
+        lp.cellVSpan = toCellAndSpan.spanY;
+    }
+
+    private boolean targetIsValid(CellAndSpan targetSpan) {
+        boolean hasValidSpan = targetSpan.spanX > 0 && targetSpan.spanY > 0;
+
+        boolean isWithinBounds = hasValidSpan
+                && targetSpan.cellX >= 0
+                && targetSpan.cellY >= 0
+                && targetSpan.cellX <= mCountX - targetSpan.spanX
+                && targetSpan.cellY <= mCountY - targetSpan.spanY;
+
+        return isWithinBounds;
+    }
+
+    private void rebuildOccupiedFromChildren() {
+        mOccupied.clear();
+
+        int childCount = mShortcutsAndWidgets.getChildCount();
+        for (int i = 0; i < childCount; i++) {
+            markCellsAsOccupiedForView(mShortcutsAndWidgets.getChildAt(i));
+        }
+    }
+
     /**
      * When the user drags an Item in the workspace sometimes we need to move the items already in
      * the workspace to make space for the new item, this function return a solution for that
