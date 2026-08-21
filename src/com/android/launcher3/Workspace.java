@@ -1831,7 +1831,8 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             if (btv.isDisplaySearchResult()) {
                 dragOptions.preDragEndScale = (float) mAllAppsIconSize / btv.getIconSize();
             }
-        } else if (Flags.homeScreenEditImprovements() && child instanceof Poppable
+        } else if ((Flags.homeScreenEditImprovements() || child instanceof FolderIcon)
+                && child instanceof Poppable
                 && !dragOptions.isAccessibleDrag) {
             Popup popup = mLauncher.getPopupControllerForHomeScreenItems()
                     .show(child);
@@ -3400,6 +3401,53 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             }
             return false;
         });
+    }
+
+    public boolean toggleFolderWidth(FolderIcon folderIcon) {
+        if (folderIcon == null) return false;
+        if (!(folderIcon.getLayoutParams() instanceof CellLayoutLayoutParams lp)) return false;
+        if (lp.cellHSpan != 1 && lp.cellHSpan != 3) return false;
+
+        CellLayout cellLayout = getParentCellLayoutForView(folderIcon);
+        if (cellLayout == null) return false;
+
+        int targetSpanX = lp.cellHSpan == 1 ? 3 : 1;
+
+        int panelStartX = 0;
+        int panelWidth = cellLayout.getCountX();
+
+        if (cellLayout instanceof MultipageCellLayout) {
+            panelWidth /= 2;
+            if (lp.getCellX() >= panelWidth) {
+                panelStartX = panelWidth;
+            }
+        }
+
+        if (targetSpanX > panelWidth) return false;
+
+        int targetCellX =
+                lp.getCellX() + (lp.cellHSpan - targetSpanX) / 2;
+        targetCellX = Utilities.boundToRange(
+                targetCellX,
+                panelStartX,
+                panelStartX + panelWidth - targetSpanX);
+
+        int leftGrowth = lp.getCellX() - targetCellX;
+        int rightGrowth =
+                targetCellX + targetSpanX - (lp.getCellX() + lp.cellHSpan);
+
+        int[] direction = {
+                rightGrowth >= leftGrowth ? 1 : -1,
+                0
+        };
+
+        CellAndSpan target = new CellAndSpan(
+                targetCellX,
+                lp.getCellY(),
+                targetSpanX,
+                lp.cellVSpan);
+
+        return resizeFolder(folderIcon, target, direction);
     }
 
     public boolean resizeFolder(FolderIcon folderIcon, CellAndSpan target, int[] direction) {
