@@ -2869,7 +2869,8 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             }
             mFolderCreateBg = new PreviewBackground(getContext());
             mFolderCreateBg.setup(mLauncher, mLauncher, null,
-                    mDragOverView.getMeasuredWidth(), mDragOverView.getPaddingTop());
+                    mDragOverView.getMeasuredWidth(), mDragOverView.getMeasuredHeight(),
+                    mDragOverView.getPaddingTop());
 
             // The full preview background should appear behind the icon
             mFolderCreateBg.isClipping = false;

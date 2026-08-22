@@ -91,6 +91,7 @@ public class PreviewItemManager {
     // as member variables for shared usage and to avoid computation on each frame
     private float mIntrinsicIconSize = -1;
     private int mTotalWidth = -1;
+    private int mTotalHeight = -1;
     private int mPrevTopPadding = -1;
     private Drawable mReferenceDrawable = null;
 
@@ -141,7 +142,8 @@ public class PreviewItemManager {
                 ? ((AppPairIcon) destView).getIconDrawableArea().getDrawable()
                 : ((BubbleTextView) destView).getIcon();
         computePreviewDrawingParams(animateDrawable.getIntrinsicWidth(),
-                destView.getMeasuredWidth());
+                destView.getMeasuredWidth(),
+                destView.getMeasuredHeight());
         mReferenceDrawable = animateDrawable;
         return animateDrawable;
     }
@@ -149,19 +151,29 @@ public class PreviewItemManager {
     public void recomputePreviewDrawingParams() {
         if (mReferenceDrawable != null) {
             computePreviewDrawingParams(mReferenceDrawable.getIntrinsicWidth(),
-                    mIcon.getMeasuredWidth());
+                    mIcon.getMeasuredWidth(),
+                    mIcon.getMeasuredHeight());
         }
     }
 
-    private void computePreviewDrawingParams(int drawableSize, int totalSize) {
-        if (mIntrinsicIconSize != drawableSize || mTotalWidth != totalSize ||
-                mPrevTopPadding != mIcon.getPaddingTop()) {
+    private void computePreviewDrawingParams(int drawableSize, int totalWidth, int totalHeight) {
+        if (mIntrinsicIconSize != drawableSize
+                || mTotalWidth != totalWidth
+                || mTotalHeight != totalHeight
+                || mPrevTopPadding != mIcon.getPaddingTop()) {
             mIntrinsicIconSize = drawableSize;
-            mTotalWidth = totalSize;
+            mTotalWidth = totalWidth;
+            mTotalHeight = totalHeight;
             mPrevTopPadding = mIcon.getPaddingTop();
 
-            mIcon.mBackground.setup(mIcon.getContext(), mIcon.mActivity, mIcon, mTotalWidth,
+            mIcon.mBackground.setup(
+                    mIcon.getContext(),
+                    mIcon.mActivity,
+                    mIcon,
+                    mTotalWidth,
+                    mTotalHeight,
                     mIcon.getPaddingTop());
+
             mIcon.mPreviewLayoutRule.init(
                     mIcon.mBackground.previewSize, mIntrinsicIconSize,
                     Utilities.isRtl(mIcon.getResources()),
@@ -214,15 +226,15 @@ public class PreviewItemManager {
         Path clipPath = bg.getClipPath().getPath();
         float firstPageItemsTransX = 0;
         if (mShouldSlideInFirstPage) {
-            PointF firstPageOffset = new PointF(bg.basePreviewOffsetX + mCurrentPageItemsTransX,
-                    bg.basePreviewOffsetY);
+            PointF firstPageOffset = new PointF(bg.getPreviewLeft() + mCurrentPageItemsTransX,
+                    bg.getPreviewTop());
             boolean shouldClip = mCurrentPageItemsTransX > mClipThreshold;
             drawParams(canvas, mCurrentPageParams, firstPageOffset, shouldClip, clipPath);
             firstPageItemsTransX = -ITEM_SLIDE_IN_OUT_DISTANCE_PX + mCurrentPageItemsTransX;
         }
 
-        PointF firstPageOffset = new PointF(bg.basePreviewOffsetX + firstPageItemsTransX,
-                bg.basePreviewOffsetY);
+        PointF firstPageOffset = new PointF(bg.getPreviewLeft() + firstPageItemsTransX,
+                bg.getPreviewTop());
         boolean shouldClipFirstPage = firstPageItemsTransX < -mClipThreshold;
         drawParams(canvas, mFirstPageParams, firstPageOffset, shouldClipFirstPage, clipPath);
         canvas.restoreToCount(saveCount);

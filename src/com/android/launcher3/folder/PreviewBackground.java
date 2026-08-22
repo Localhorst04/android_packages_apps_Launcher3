@@ -74,6 +74,7 @@ public class PreviewBackground extends DelegatedCellDrawing {
 
     private final Matrix mShaderMatrix = new Matrix();
     private final PathWrapper mPath = new PathWrapper();
+    private final Rect mBackgroundBounds = new Rect();
 
     private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
@@ -86,8 +87,6 @@ public class PreviewBackground extends DelegatedCellDrawing {
     private View mInvalidateDelegate;
 
     int previewSize;
-    int basePreviewOffsetX;
-    int basePreviewOffsetY;
 
     private CellLayout mDrawingDelegate;
 
@@ -165,7 +164,7 @@ public class PreviewBackground extends DelegatedCellDrawing {
     }
 
     public void setup(Context context, ActivityContext activity, View invalidateDelegate,
-                      int availableSpaceX, int topPadding) {
+                      int availableSpaceX, int availableSpaceY, int topPadding) {
         mInvalidateDelegate = invalidateDelegate;
 
         TypedArray ta = context.getTheme().obtainStyledAttributes(R.styleable.FolderIconPreview);
@@ -176,8 +175,14 @@ public class PreviewBackground extends DelegatedCellDrawing {
         DeviceProfile grid = activity.getDeviceProfile();
         previewSize = grid.folderIconSizePx;
 
-        basePreviewOffsetX = (availableSpaceX - previewSize) / 2;
-        basePreviewOffsetY = topPadding + grid.folderIconOffsetYPx;
+        int previewLeft = (availableSpaceX - previewSize) / 2;
+        int previewTop = topPadding + grid.folderIconOffsetYPx;
+
+        mBackgroundBounds.set(
+                previewLeft,
+                previewTop,
+                previewLeft + previewSize,
+                previewTop + previewSize);
 
         // Stroke width is 1dp
         mStrokeWidth = context.getResources().getDisplayMetrics().density;
@@ -196,15 +201,11 @@ public class PreviewBackground extends DelegatedCellDrawing {
     }
 
     void getBounds(Rect outBounds) {
-        int top = basePreviewOffsetY;
-        int left = basePreviewOffsetX;
-        int right = left + previewSize;
-        int bottom = top + previewSize;
-        outBounds.set(left, top, right, bottom);
+        outBounds.set(mBackgroundBounds);
     }
 
     public int getRadius() {
-        return previewSize / 2;
+        return Math.min(mBackgroundBounds.width(), mBackgroundBounds.height()) / 2;
     }
 
     int getScaledRadius() {
@@ -212,11 +213,19 @@ public class PreviewBackground extends DelegatedCellDrawing {
     }
 
     int getOffsetX() {
-        return basePreviewOffsetX - (getScaledRadius() - getRadius());
+        return mBackgroundBounds.left - (getScaledRadius() - getRadius());
     }
 
     int getOffsetY() {
-        return basePreviewOffsetY - (getScaledRadius() - getRadius());
+        return mBackgroundBounds.top - (getScaledRadius() - getRadius());
+    }
+
+    int getPreviewLeft() {
+        return mBackgroundBounds.centerX() - previewSize / 2;
+    }
+
+    int getPreviewTop() {
+        return mBackgroundBounds.centerY() - previewSize / 2;
     }
 
     /**
@@ -373,8 +382,8 @@ public class PreviewBackground extends DelegatedCellDrawing {
         }
         // Find the difference in radius so that the clip path remains centered.
         float radiusDifference = radius - getRadius();
-        float offsetX = basePreviewOffsetX - radiusDifference;
-        float offsetY = basePreviewOffsetY - radiusDifference;
+        float offsetX = mBackgroundBounds.left - radiusDifference;
+        float offsetY = mBackgroundBounds.top - radiusDifference;
         getShape().addToPath(mPath, offsetX, offsetY, radius);
         return mPath;
     }
