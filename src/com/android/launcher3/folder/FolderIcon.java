@@ -609,8 +609,8 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         mTmpParams = mPreviewItemManager.computePreviewItemDrawingParams(
                 Math.min(MAX_NUM_ITEMS_IN_PREVIEW, index), curNumItems, mTmpParams);
 
-        mTmpParams.transX += mBackground.basePreviewOffsetX;
-        mTmpParams.transY += mBackground.basePreviewOffsetY;
+        mTmpParams.transX += mBackground.getPreviewLeft();
+        mTmpParams.transY += mBackground.getPreviewTop();
 
         float intrinsicIconSize = mPreviewItemManager.getIntrinsicIconSize();
         float offsetX = mTmpParams.transX + (mTmpParams.scale * intrinsicIconSize) / 2;
