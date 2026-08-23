@@ -477,10 +477,10 @@ class WorkspaceItemProcessor(
 
         if (collection is FolderInfo && c.container == Favorites.CONTAINER_DESKTOP) {
             collection.spanX = c.spanX.coerceAtLeast(1)
-            collection.spanY = 1
+            collection.spanY = c.spanY.coerceAtLeast(1)
 
             collection.minSpanX = collection.spanX
-            collection.minSpanY = 1
+            collection.minSpanY = collection.spanY
         } else {
             collection.spanX = 1
             collection.spanY = 1
