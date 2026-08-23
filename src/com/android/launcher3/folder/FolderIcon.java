@@ -173,6 +173,20 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         }
     };
 
+    private boolean mRequestedTextVisible = true;
+
+    private boolean isExpandedFolder() {
+        return mInfo != null
+                && mInfo.container == LauncherSettings.Favorites.CONTAINER_DESKTOP
+                && (mInfo.spanX > 1 || mInfo.spanY > 1);
+    }
+
+    private void updateTextVisibility() {
+        mFolderName.setVisibility(
+                        mRequestedTextVisible
+                        && !isExpandedFolder()
+                        ? VISIBLE : INVISIBLE);
+    }
 
     public FolderIcon(Context context) {
         this(context, null);
@@ -726,6 +740,9 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         boolean shouldCenterIcon = isAllAppsFolder
                 || mActivity.getDeviceProfile().getWorkspaceIconProfile().getIconCenterVertically()
                 || !mFolderName.shouldShowLabel();
+
+        updateTextVisibility();
+
         if (shouldCenterIcon) {
             int iconSize = isAllAppsFolder
                     ? mActivity.getDeviceProfile().getAllAppsProfile().getIconSizePx()
@@ -746,11 +763,8 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
 
     /** Sets the visibility of the icon's title text */
     public void setTextVisible(boolean visible) {
-        if (visible) {
-            mFolderName.setVisibility(VISIBLE);
-        } else {
-            mFolderName.setVisibility(INVISIBLE);
-        }
+        mRequestedTextVisible = visible;
+        updateTextVisibility();
     }
 
     public boolean getTextVisible() {
