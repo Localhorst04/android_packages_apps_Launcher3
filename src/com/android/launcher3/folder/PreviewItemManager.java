@@ -18,6 +18,7 @@ package com.android.launcher3.folder;
 
 import static com.android.launcher3.BubbleTextView.DISPLAY_FOLDER;
 import static com.android.launcher3.LauncherPrefsExt.ALLAPPS_THEMED_ICONS;
+import static com.android.launcher3.LauncherSettings.Favorites.CONTAINER_DESKTOP;
 import static com.android.launcher3.LauncherSettings.Favorites.DESKTOP_ICON_FLAG;
 import static com.android.launcher3.Utilities.dpToPx;
 import static com.android.launcher3.folder.ClippedFolderIconLayoutRule.ENTER_INDEX;
@@ -92,6 +93,8 @@ public class PreviewItemManager {
     private float mIntrinsicIconSize = -1;
     private int mTotalWidth = -1;
     private int mTotalHeight = -1;
+    private int mPrevSpanX = -1;
+    private int mPrevSpanY = -1;
     private int mPrevTopPadding = -1;
     private Drawable mReferenceDrawable = null;
 
@@ -157,13 +160,24 @@ public class PreviewItemManager {
     }
 
     private void computePreviewDrawingParams(int drawableSize, int totalWidth, int totalHeight) {
+        int spanX = 1;
+        int spanY = 1;
+        if (mIcon.mInfo.container == CONTAINER_DESKTOP) {
+            spanX = mIcon.mInfo.spanX;
+            spanY = mIcon.mInfo.spanY;
+        }
+
         if (mIntrinsicIconSize != drawableSize
                 || mTotalWidth != totalWidth
                 || mTotalHeight != totalHeight
+                || mPrevSpanX != spanX
+                || mPrevSpanY != spanY
                 || mPrevTopPadding != mIcon.getPaddingTop()) {
             mIntrinsicIconSize = drawableSize;
             mTotalWidth = totalWidth;
             mTotalHeight = totalHeight;
+            mPrevSpanX = spanX;
+            mPrevSpanY = spanY;
             mPrevTopPadding = mIcon.getPaddingTop();
 
             mIcon.mBackground.setup(
@@ -172,7 +186,9 @@ public class PreviewItemManager {
                     mIcon,
                     mTotalWidth,
                     mTotalHeight,
-                    mIcon.getPaddingTop());
+                    mIcon.getPaddingTop(),
+                    spanX,
+                    spanY);
 
             mIcon.mPreviewLayoutRule.init(
                     mIcon.mBackground.previewSize, mIntrinsicIconSize,

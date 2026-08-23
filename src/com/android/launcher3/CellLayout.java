@@ -718,8 +718,16 @@ public class CellLayout extends ViewGroup {
 
     public void setFolderLeaveBehindCell(int x, int y) {
         View child = getChildAt(x, y);
-        mFolderLeaveBehind.setup(getContext(), mActivity, null,
-                child.getMeasuredWidth(), child.getMeasuredHeight(), child.getPaddingTop());
+
+        mFolderLeaveBehind.setup(
+            getContext(),
+            mActivity,
+            null,
+            child.getMeasuredWidth(),
+            child.getMeasuredHeight(),
+            child.getPaddingTop(),
+            1,
+            1);
 
         mFolderLeaveBehind.mDelegateCellX = x;
         mFolderLeaveBehind.mDelegateCellY = y;

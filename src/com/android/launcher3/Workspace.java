@@ -2868,9 +2868,15 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                 mMSDLPlayerWrapper.playToken(MSDLToken.DRAG_INDICATOR_DISCRETE);
             }
             mFolderCreateBg = new PreviewBackground(getContext());
-            mFolderCreateBg.setup(mLauncher, mLauncher, null,
-                    mDragOverView.getMeasuredWidth(), mDragOverView.getMeasuredHeight(),
-                    mDragOverView.getPaddingTop());
+            mFolderCreateBg.setup(
+                mLauncher,
+                mLauncher,
+                null,
+                mDragOverView.getMeasuredWidth(),
+                mDragOverView.getMeasuredHeight(),
+                mDragOverView.getPaddingTop(),
+                1,
+                1);
 
             // The full preview background should appear behind the icon
             mFolderCreateBg.isClipping = false;
