@@ -62,6 +62,44 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
+private interface ResizeTarget {
+    val view: View
+    val itemInfo: ItemInfo
+    val minSpanX: Int
+    val minSpanY: Int
+    val maxSpanX: Int
+    val maxSpanY: Int
+    val visualScale: Float
+
+    fun canResizeTo(cellX: Int, cellY: Int, spanX: Int, spanY: Int): Boolean
+
+    fun onResizeApplied(spanX: Int, spanY: Int, committed: Boolean)
+}
+
+private class WidgetResizeTarget(
+    val widgetView: LauncherAppWidgetHostView,
+    providerInfo: LauncherAppWidgetProviderInfo,
+) : ResizeTarget {
+    override val view: View = widgetView
+    override val itemInfo: ItemInfo = widgetView.tag as LauncherAppWidgetInfo
+    override val minSpanX: Int = providerInfo.minSpanX
+    override val minSpanY: Int = providerInfo.minSpanY
+    override val maxSpanX: Int = providerInfo.maxSpanX
+    override val maxSpanY: Int = providerInfo.maxSpanY
+    override val visualScale: Float
+        get() = widgetView.scaleToFit
+
+    // Avoid reordering a pending widget that already occupies workspace cells.
+    override fun canResizeTo(cellX: Int, cellY: Int, spanX: Int, spanY: Int): Boolean =
+        widgetView !is PendingAppWidgetHostView
+
+    override fun onResizeApplied(spanX: Int, spanY: Int, committed: Boolean) {
+        if (!committed) {
+            widgetView.updateSizeRanges(spanX, spanY)
+        }
+    }
+}
+
 /**
  * A floating view representing the frame shown with resize handles (dots) around the widgets when
  * you hold press it.
@@ -79,6 +117,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private lateinit var dragHandles: DragHandles
     private lateinit var widgetView: LauncherAppWidgetHostView
+    private lateinit var resizeTarget: ResizeTarget
     private lateinit var cellLayout: CellLayout
     private lateinit var dragLayer: DragLayer
 
@@ -122,10 +161,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private var runningHInc = 0
     private var runningVInc = 0
-    private var minHSpan = 0
-    private var minVSpan = 0
-    private var maxHSpan = 0
-    private var maxVSpan = 0
     private var deltaX = 0
     private var deltaY = 0
     private var deltaXAddOn = 0
@@ -199,7 +234,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     /** Retrieves the view where accessibility actions happen. */
-    fun getViewForAccessibility(): View = widgetView
+    fun getViewForAccessibility(): View = resizeTarget.view
 
     /** Initializes a resize frame that can be shown around the provided [widgetView]. */
     private fun setupForWidget(
@@ -253,12 +288,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         this.cellLayout = cellLayout
         this.widgetView = widgetView
         val info = widgetView.appWidgetInfo as LauncherAppWidgetProviderInfo
+        this.resizeTarget = WidgetResizeTarget(widgetView, info)
         this.dragLayer = dragLayer
-
-        minHSpan = info.minSpanX
-        minVSpan = info.minSpanY
-        maxHSpan = info.maxSpanX
-        maxVSpan = info.maxSpanY
 
         val widgetInfoOnView = this.widgetView.tag as LauncherAppWidgetInfo
         val idp = getIDP(cellLayout.context)
@@ -272,7 +303,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // When we create the resize frame, we first mark all cells as unoccupied. The appropriate
         // cells (same if not resized, or different) will be marked as occupied when the resize
         // frame is dismissed.
-        this.cellLayout.markCellsAsUnoccupiedForView(this.widgetView)
+        this.cellLayout.markCellsAsUnoccupiedForView(resizeTarget.view)
 
         launcher.statsLogManager
             .logger()
@@ -292,10 +323,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private fun beginResizeIfPointInRegion(x: Int, y: Int): Boolean {
         isLeftBorderActive = (x < touchTargetWidth)
         isRightBorderActive = (x > width - touchTargetWidth)
-        isTopBorderActive =
-            (y < touchTargetWidth + topTouchRegionAdjustment)
-        isBottomBorderActive =
-            (y > height - touchTargetWidth + bottomTouchRegionAdjustment)
+        isTopBorderActive = (y < touchTargetWidth + topTouchRegionAdjustment)
+        isBottomBorderActive = (y > height - touchTargetWidth + bottomTouchRegionAdjustment)
 
         val anyBordersActive =
             isLeftBorderActive || isRightBorderActive || isTopBorderActive || isBottomBorderActive
@@ -357,7 +386,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         lp.y = tempRange1.start
         lp.height = tempRange1.size()
 
-        resizeWidgetIfNeeded(onDismiss = false)
+        resizeTargetIfNeeded(onDismiss = false)
 
         // Handle invalid resize across CellLayouts in the two panel UI.
         if (cellLayout.parent is Workspace<*>) {
@@ -411,9 +440,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         )
     }
 
-    /** Based on the current deltas, we determine if and how to resize the widget. */
-    private fun resizeWidgetIfNeeded(onDismiss: Boolean) {
-        val wlp: ViewGroup.LayoutParams? = widgetView.layoutParams
+    /** Based on the current deltas, we determine if and how to resize the target. */
+    private fun resizeTargetIfNeeded(onDismiss: Boolean) {
+        val targetView = resizeTarget.view
+        val wlp: ViewGroup.LayoutParams? = targetView.layoutParams
         if (wlp == null || wlp !is CellLayoutLayoutParams) return
 
         val dp = launcher.deviceProfile
@@ -443,8 +473,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 moveStart = isLeftBorderActive,
                 moveEnd = isRightBorderActive,
                 delta = hSpanInc,
-                minSize = minHSpan,
-                maxSize = maxHSpan,
+                minSize = resizeTarget.minSpanX,
+                maxSize = resizeTarget.maxSpanX,
                 maxEnd = cellLayout.countX,
                 outputRange = tempRange2,
             )
@@ -461,8 +491,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 moveStart = isTopBorderActive,
                 moveEnd = isBottomBorderActive,
                 delta = vSpanInc,
-                minSize = minVSpan,
-                maxSize = maxVSpan,
+                minSize = resizeTarget.minSpanY,
+                maxSize = resizeTarget.maxSpanY,
                 maxEnd = cellLayout.countY,
                 outputRange = tempRange2,
             )
@@ -489,17 +519,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 directionVector[DIRECTION_VERTICAL_INDEX]
         }
 
-        // We don't want to evaluate resize if a widget was pending config activity and was already
-        // occupying a space on the screen. This otherwise will cause reorder algorithm evaluate a
-        // different location for the widget and cause a jump.
+        // Apply target-specific policy before CellLayout evaluates workspace placement.
         if (
-            widgetView !is PendingAppWidgetHostView &&
+            resizeTarget.canResizeTo(cellX, cellY, spanX, spanY) &&
                 cellLayout.createAreaForResize(
                     cellX,
                     cellY,
                     spanX,
                     spanY,
-                    /*dragView=*/ widgetView,
+                    /*dragView=*/ targetView,
                     directionVector,
                     /*commit=*/ onDismiss,
                 )
@@ -515,11 +543,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             runningVInc += vSpanDelta
             runningHInc += hSpanDelta
 
-            if (!onDismiss) {
-                widgetView.updateSizeRanges(spanX, spanY)
-            }
+            resizeTarget.onResizeApplied(spanX, spanY, committed = onDismiss)
         }
-        widgetView.requestLayout()
+        targetView.requestLayout()
     }
 
     override fun onDetachedFromWindow() {
@@ -527,11 +553,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         launcher.dragController.removeDragListener(this)
         // We are done with resizing the widget. Save the widget size & position to LauncherModel
-        resizeWidgetIfNeeded(true)
+        resizeTargetIfNeeded(true)
         launcher.statsLogManager
             .logger()
             .withInstanceId(logInstanceId)
-            .withItemInfo(widgetView.tag as ItemInfo)
+            .withItemInfo(resizeTarget.itemInfo)
             .log(LauncherEvent.LAUNCHER_WIDGET_RESIZE_COMPLETED)
     }
 
@@ -545,16 +571,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         deltaX = 0
         deltaY = 0
 
-        post { snapToWidget(true) }
+        post { snapToTarget(true) }
     }
 
     /**
-     * Returns the rect of this view when the frame is snapped around the widget, with the bounds
+     * Returns the rect of this view when the frame is snapped around the target, with the bounds
      * relative to the [DragLayer].
      */
     private fun getSnappedRectRelativeToDragLayer(out: Rect) {
-        val scale = widgetView.scaleToFit
-        dragLayer.getViewRectRelativeToSelf(widgetView, out)
+        val scale = resizeTarget.visualScale
+        dragLayer.getViewRectRelativeToSelf(resizeTarget.view, out)
 
         val width = 2 * backgroundPadding + Math.round(scale * out.width())
         val height = 2 * backgroundPadding + Math.round(scale * out.height())
@@ -567,7 +593,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         out.bottom = out.top + height
     }
 
-    private fun snapToWidget(animate: Boolean) {
+    private fun snapToTarget(animate: Boolean) {
         getSnappedRectRelativeToDragLayer(TempRect)
         val newWidth = TempRect.width()
         val newHeight = TempRect.height()
@@ -660,10 +686,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     override fun onKey(v: View, keyCode: Int, event: KeyEvent): Boolean {
-        // Clear the frame and give focus to the widget host view when a directional key is pressed.
+        // Clear the frame and give focus to the target view when a directional key is pressed.
         if (shouldCloseResizeFrame(keyCode)) {
             close(/* animate= */ false)
-            widgetView.requestFocus()
+            resizeTarget.view.requestFocus()
             return true
         }
         return false
@@ -998,7 +1024,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
             dragLayer.addView(frame)
             frame.mIsOpen = true
-            frame.post { frame.snapToWidget(false) }
+            frame.post { frame.snapToTarget(false) }
         }
 
         private fun getSpanIncrement(deltaFrac: Float): Int {
