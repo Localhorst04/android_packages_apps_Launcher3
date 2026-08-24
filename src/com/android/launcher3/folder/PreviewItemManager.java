@@ -37,6 +37,7 @@ import android.graphics.Canvas;
 import android.graphics.Path;
 import android.graphics.PointF;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.util.FloatProperty;
 import android.util.Log;
@@ -199,6 +200,30 @@ public class PreviewItemManager {
         }
     }
 
+    private FolderPreviewLayout.Snapshot calculateMultiSpanPreviewSnapshot() {
+        Rect backgroundBounds = new Rect();
+        mIcon.mBackground.getBounds(backgroundBounds);
+
+        float directIconSize = mIcon.mActivity.getDeviceProfile()
+                .getWorkspaceIconProfile().getIconSizePx();
+        int folderColumnCount = mIcon.mActivity.getDeviceProfile()
+                .getFolderProfile().getNumColumns();
+        boolean isRtl = Utilities.isRtl(mIcon.getResources());
+
+        FolderPreviewLayout.Snapshot snapshot = FolderPreviewLayout.calculateSnapshot(
+                mIcon.mInfo.getContents(),
+                mIcon.mInfo.spanX,
+                mIcon.mInfo.spanY,
+                new RectF(backgroundBounds),
+                mIcon.mBackground.previewSize,
+                directIconSize,
+                mIntrinsicIconSize,
+                isRtl,
+                folderColumnCount);
+
+        return snapshot;
+    }
+
     PreviewItemDrawingParams computePreviewItemDrawingParams(int index, int curNumItems,
             PreviewItemDrawingParams params) {
         // We use an index of -1 to represent an icon on the workspace for the destroy and
@@ -289,28 +314,79 @@ public class PreviewItemManager {
     }
 
     public void hidePreviewItem(int index, boolean hidden) {
+        int paramIndex = index;
+
         // If there are more params than visible in the preview, they are used for enter/exit
         // animation purposes and they were added to the front of the list.
         // To index the params properly, we need to skip these params.
-        index = index + Math.max(mFirstPageParams.size() - MAX_NUM_ITEMS_IN_PREVIEW, 0);
+        if (!mIcon.isMultiSpanFolder()) {
+            paramIndex += Math.max(
+                mFirstPageParams.size() - MAX_NUM_ITEMS_IN_PREVIEW,
+                0);
+        }
 
-        PreviewItemDrawingParams params = index < mFirstPageParams.size() ?
-                mFirstPageParams.get(index) : null;
-        if (params != null) {
-            params.hidden = hidden;
+        if (paramIndex < 0 || paramIndex >= mFirstPageParams.size()) {
+            return;
+        }
+
+        mFirstPageParams.get(paramIndex).hidden = hidden;
+    }
+
+    private static void matchParamCount(
+            ArrayList<PreviewItemDrawingParams> params, int itemCount) {
+        while (itemCount < params.size()) {
+            params.remove(params.size() - 1);
+        }
+
+        while (itemCount > params.size()) {
+            params.add(new PreviewItemDrawingParams(0, 0, 0));
+        }
+    }
+
+    private void applyPlacement(
+            FolderPreviewLayout.ItemPlacement placement,
+            PreviewItemDrawingParams params) {
+        RectF bounds = placement.getBounds();
+
+        float scale = bounds.width() / mIntrinsicIconSize;
+        float transX = bounds.left - mIcon.mBackground.getPreviewLeft();
+        float transY = bounds.top - mIcon.mBackground.getPreviewTop();
+
+        params.update(transX, transY, scale);
+    }
+
+    private void applySnapshot(
+            FolderPreviewLayout.Snapshot snapshot,
+            ArrayList<PreviewItemDrawingParams> params) {
+        List<FolderPreviewLayout.ItemPlacement> placements = snapshot.getItems();
+
+        for (PreviewItemDrawingParams drawingParams : params) {
+            if (drawingParams.anim != null) {
+                drawingParams.anim.cancel();
+            }
+        }
+
+        matchParamCount(params, placements.size());
+
+        for (int i = 0; i < placements.size(); i++) {
+            FolderPreviewLayout.ItemPlacement placement = placements.get(i);
+            PreviewItemDrawingParams drawingParams = params.get(i);
+
+            setDrawable(drawingParams, placement.getItem());
+            applyPlacement(placement, drawingParams);
         }
     }
 
     void buildParamsForPage(int page, ArrayList<PreviewItemDrawingParams> params, boolean animate) {
+        if (page == 0 && mIcon.isMultiSpanFolder() && mIntrinsicIconSize > 0) {
+            applySnapshot(calculateMultiSpanPreviewSnapshot(), params);
+            return;
+        }
+
         List<ItemInfo> items = mIcon.getPreviewItemsOnPage(page);
 
-        // We adjust the size of the list to match the number of items in the preview.
-        while (items.size() < params.size()) {
-            params.remove(params.size() - 1);
-        }
-        while (items.size() > params.size()) {
-            params.add(new PreviewItemDrawingParams(0, 0, 0));
-        }
+        // We adjust the size of the list to match the number of items in the preview
+        matchParamCount(params, items.size());
 
         int numItemsInFirstPagePreview = page == 0 ? items.size() : MAX_NUM_ITEMS_IN_PREVIEW;
         for (int i = 0; i < params.size(); i++) {
@@ -420,6 +496,11 @@ public class PreviewItemManager {
         int numItems = newItems.size();
         final ArrayList<PreviewItemDrawingParams> params = mFirstPageParams;
         buildParamsForPage(0, params, false);
+
+        if (mIcon.isMultiSpanFolder()) {
+            onParamsChanged();
+            return;
+        }
 
         // New preview items for items that are moving in (except for the dropped item).
         List<ItemInfo> moveIn = new ArrayList<>();
