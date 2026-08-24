@@ -31,6 +31,18 @@ object FolderPreviewLayout {
 
     data class ItemPlacement(val item: ItemInfo, val role: ItemRole, val bounds: RectF)
 
+    data class Grid(
+        val columns: Int,
+        val rows: Int,
+        val startX: Float,
+        val startY: Float,
+        val itemSize: Float,
+        val gap: Float,
+    ) {
+        val capacity: Int
+            get() = columns * rows
+    }
+
     data class Snapshot(
         val backgroundBounds: RectF,
         val overviewBounds: RectF?,
@@ -41,10 +53,8 @@ object FolderPreviewLayout {
         RectF(left, top, left + size, top + size)
 
     @JvmStatic
-    fun selectItems(items: List<ItemInfo>, spanX: Int, spanY: Int): ContentSelection {
-        require(spanX > 0 && spanY > 0)
-
-        val capacity = spanX * spanY
+    fun selectItems(items: List<ItemInfo>, capacity: Int): ContentSelection {
+        require(capacity > 0)
 
         if (items.size <= capacity) {
             return ContentSelection(directItems = items.toList(), overviewItems = emptyList())
@@ -62,63 +72,21 @@ object FolderPreviewLayout {
     }
 
     @JvmStatic
-    fun calculateTileBounds(
-        cellIndex: Int,
-        spanX: Int,
-        spanY: Int,
-        backgroundBounds: RectF,
-        tileSize: Float,
-        isRtl: Boolean,
-    ): RectF {
-        require(spanX > 0 && spanY > 0)
-        require(cellIndex in 0 until spanX * spanY)
-        require(tileSize > 0f)
-        require(backgroundBounds.width() >= tileSize)
-        require(backgroundBounds.height() >= tileSize)
-
-        val row = cellIndex / spanX
-        val logicalColumn = cellIndex % spanX
-        val column = if (isRtl) spanX - logicalColumn - 1 else logicalColumn
-
-        val horizontalStep =
-            if (spanX == 1) 0f else (backgroundBounds.width() - tileSize) / (spanX - 1)
-        val verticalStep =
-            if (spanY == 1) 0f else (backgroundBounds.height() - tileSize) / (spanY - 1)
-
-        val left = backgroundBounds.left + column * horizontalStep
-        val top = backgroundBounds.top + row * verticalStep
-
-        return squareBounds(left, top, tileSize)
-    }
-
-    @JvmStatic
     fun calculateDirectPlacements(
         items: List<ItemInfo>,
-        spanX: Int,
-        spanY: Int,
-        backgroundBounds: RectF,
-        tileSize: Float,
-        directIconSize: Float,
+        grid: Grid,
         isRtl: Boolean,
     ): List<ItemPlacement> {
-        require(items.size <= spanX * spanY)
-        require(directIconSize > 0f)
-
-        val renderedIconSize = directIconSize.coerceAtMost(tileSize)
-        val halfIconSize = renderedIconSize / 2f
+        require(items.size <= grid.capacity)
 
         val placements =
-            items.mapIndexed { cellIndex, item ->
-                val tileBounds =
-                    calculateTileBounds(cellIndex, spanX, spanY, backgroundBounds, tileSize, isRtl)
-
-                val left = tileBounds.centerX() - halfIconSize
-                val top = tileBounds.centerY() - halfIconSize
-                val iconBounds = squareBounds(left, top, renderedIconSize)
-
-                ItemPlacement(item = item, role = ItemRole.DIRECT, bounds = iconBounds)
+            items.mapIndexed { index, item ->
+                ItemPlacement(
+                    item = item,
+                    role = ItemRole.DIRECT,
+                    bounds = calculateGridItemBounds(index, grid, isRtl),
+                )
             }
-
         return placements
     }
 
@@ -155,50 +123,81 @@ object FolderPreviewLayout {
     }
 
     @JvmStatic
+    fun calculateGrid(availableBounds: RectF, itemSize: Float, gap: Float): Grid {
+        require(itemSize > 0f)
+        require(gap >= 0f)
+
+        val availableWidth = availableBounds.width()
+        val availableHeight = availableBounds.height()
+        require(availableWidth >= itemSize && availableHeight >= itemSize)
+
+        val columns = ((availableWidth + gap) / (itemSize + gap)).toInt()
+        val rows = ((availableHeight + gap) / (itemSize + gap)).toInt()
+
+        val usedWidth = columns * itemSize + (columns - 1) * gap
+        val usedHeight = rows * itemSize + (rows - 1) * gap
+
+        return Grid(
+            columns = columns,
+            rows = rows,
+            startX = availableBounds.centerX() - usedWidth / 2f,
+            startY = availableBounds.centerY() - usedHeight / 2f,
+            itemSize = itemSize,
+            gap = gap,
+        )
+    }
+
+    @JvmStatic
+    fun calculateGridItemBounds(index: Int, grid: Grid, isRtl: Boolean): RectF {
+        require(index in 0 until grid.capacity)
+
+        val row = index / grid.columns
+        val logicalColumn = index % grid.columns
+        val column = if (isRtl) grid.columns - logicalColumn - 1 else logicalColumn
+        val step = grid.itemSize + grid.gap
+
+        return squareBounds(grid.startX + column * step, grid.startY + row * step, grid.itemSize)
+    }
+
+    @JvmStatic
     fun calculateSnapshot(
         items: List<ItemInfo>,
-        spanX: Int,
-        spanY: Int,
         backgroundBounds: RectF,
-        tileSize: Float,
-        directIconSize: Float,
+        itemSize: Float,
+        minPadding: Float,
+        gap: Float,
         intrinsicIconSize: Float,
         isRtl: Boolean,
         folderColumnCount: Int,
     ): Snapshot {
-        val snapshotBounds = RectF(backgroundBounds)
-        val selection = selectItems(items, spanX, spanY)
+        require(minPadding >= 0f)
 
-        val directPlacements =
-            calculateDirectPlacements(
-                selection.directItems,
-                spanX,
-                spanY,
-                snapshotBounds,
-                tileSize,
-                directIconSize,
-                isRtl,
-            )
+        val snapshotBounds = RectF(backgroundBounds)
+        val availableBounds = RectF(snapshotBounds)
+        availableBounds.inset(minPadding, minPadding)
+
+        val grid = calculateGrid(availableBounds, itemSize, gap)
+        val selection = selectItems(items, grid.capacity)
+
+        val directPlacements = calculateDirectPlacements(selection.directItems, grid, isRtl)
 
         if (selection.overviewItems.isEmpty()) {
             return Snapshot(snapshotBounds, null, directPlacements)
         }
 
-        val overviewCellIndex = spanX * spanY - 1
-        val overviewBounds =
-            calculateTileBounds(overviewCellIndex, spanX, spanY, snapshotBounds, tileSize, isRtl)
+        val overviewIndex = grid.capacity - 1
+        val overviewBounds = calculateGridItemBounds(overviewIndex, grid, isRtl)
 
         val overviewPlacements =
             calculateOverviewPlacements(
                 selection.overviewItems,
                 overviewBounds,
-                tileSize,
+                grid.itemSize,
                 intrinsicIconSize,
                 isRtl,
                 folderColumnCount,
             )
 
-        val placements = directPlacements + overviewPlacements
-        return Snapshot(snapshotBounds, overviewBounds, placements)
+        return Snapshot(snapshotBounds, overviewBounds, directPlacements + overviewPlacements)
     }
 }

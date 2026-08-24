@@ -33,6 +33,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Path;
 import android.graphics.PointF;
@@ -48,6 +49,7 @@ import androidx.annotation.VisibleForTesting;
 
 import com.android.launcher3.BubbleTextView;
 import com.android.launcher3.LauncherAppState;
+import com.android.launcher3.R;
 import com.android.launcher3.Utilities;
 import com.android.launcher3.apppairs.AppPairIcon;
 import com.android.launcher3.apppairs.AppPairIconDrawingParams;
@@ -206,17 +208,28 @@ public class PreviewItemManager {
 
         float directIconSize = mIcon.mActivity.getDeviceProfile()
                 .getWorkspaceIconProfile().getIconSizePx();
+
         int folderColumnCount = mIcon.mActivity.getDeviceProfile()
                 .getFolderProfile().getNumColumns();
         boolean isRtl = Utilities.isRtl(mIcon.getResources());
 
+        Resources resources = mContext.getResources();
+
+        float itemScale = resources.getFloat(R.dimen.folder_multi_span_preview_item_scale);
+        float minPadding = resources.getDimension(R.dimen.folder_multi_span_preview_min_padding);
+        float gap = resources.getDimension(R.dimen.folder_multi_span_preview_gap);
+
+        float maxItemSize =
+                Math.min(backgroundBounds.width(), backgroundBounds.height()) - 2 * minPadding;
+
+        float itemSize = Math.min(directIconSize * itemScale, maxItemSize);
+
         FolderPreviewLayout.Snapshot snapshot = FolderPreviewLayout.calculateSnapshot(
                 mIcon.mInfo.getContents(),
-                mIcon.mInfo.spanX,
-                mIcon.mInfo.spanY,
                 new RectF(backgroundBounds),
-                mIcon.mBackground.previewSize,
-                directIconSize,
+                itemSize,
+                minPadding,
+                gap,
                 mIntrinsicIconSize,
                 isRtl,
                 folderColumnCount);
