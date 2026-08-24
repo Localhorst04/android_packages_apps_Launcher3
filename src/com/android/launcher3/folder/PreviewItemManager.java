@@ -202,34 +202,74 @@ public class PreviewItemManager {
         }
     }
 
-    private FolderPreviewLayout.Snapshot calculateMultiSpanPreviewSnapshot() {
-        Rect backgroundBounds = new Rect();
-        mIcon.mBackground.getBounds(backgroundBounds);
+    private FolderPreviewLayout.Grid calculateWorkspacePreviewGrid(
+            RectF backgroundBounds) {
+        Resources resources = mContext.getResources();
 
         float directIconSize = mIcon.mActivity.getDeviceProfile()
                 .getWorkspaceIconProfile().getIconSizePx();
+        float itemScale =
+                resources.getFloat(R.dimen.folder_workspace_preview_item_scale);
+        float minPadding =
+                resources.getDimension(R.dimen.folder_workspace_preview_min_padding);
+        float gap =
+                resources.getDimension(R.dimen.folder_workspace_preview_gap);
+
+        float maxItemSize =
+                Math.min(backgroundBounds.width(), backgroundBounds.height())
+                        - 2 * minPadding;
+        float itemSize = Math.min(directIconSize * itemScale, maxItemSize);
+
+        RectF availableBounds = new RectF(backgroundBounds);
+        availableBounds.inset(minPadding, minPadding);
+
+        return FolderPreviewLayout.calculateGrid(availableBounds, itemSize, gap);
+    }
+
+    boolean isPreviewTightlyWrapped(
+            int availableSpaceX,
+            int availableSpaceY,
+            int spanX,
+            int spanY) {
+        if (availableSpaceX <= 0
+            || availableSpaceY <= 0
+            || spanX <= 0
+            || spanY <= 0) return false;
+
+        Rect backgroundBounds = new Rect();
+        PreviewBackground.calculateBackgroundBounds(
+            mIcon.mActivity.getDeviceProfile(),
+            availableSpaceX,
+            availableSpaceY,
+            mIcon.getPaddingTop(),
+            spanX,
+            spanY,
+            backgroundBounds);
+
+        FolderPreviewLayout.Grid grid =
+                calculateWorkspacePreviewGrid(new RectF(backgroundBounds));
+
+        return FolderPreviewLayout.isTightlyWrapped(
+            mIcon.mInfo.getContents().size(),
+            grid);
+    }
+
+    private FolderPreviewLayout.Snapshot calculateWorkspacePreviewSnapshot() {
+        Rect backgroundBounds = new Rect();
+        mIcon.mBackground.getBounds(backgroundBounds);
+
+        RectF snapshotBounds = new RectF(backgroundBounds);
+        FolderPreviewLayout.Grid grid =
+            calculateWorkspacePreviewGrid(snapshotBounds);
 
         int folderColumnCount = mIcon.mActivity.getDeviceProfile()
                 .getFolderProfile().getNumColumns();
         boolean isRtl = Utilities.isRtl(mIcon.getResources());
 
-        Resources resources = mContext.getResources();
-
-        float itemScale = resources.getFloat(R.dimen.folder_multi_span_preview_item_scale);
-        float minPadding = resources.getDimension(R.dimen.folder_multi_span_preview_min_padding);
-        float gap = resources.getDimension(R.dimen.folder_multi_span_preview_gap);
-
-        float maxItemSize =
-                Math.min(backgroundBounds.width(), backgroundBounds.height()) - 2 * minPadding;
-
-        float itemSize = Math.min(directIconSize * itemScale, maxItemSize);
-
         FolderPreviewLayout.Snapshot snapshot = FolderPreviewLayout.calculateSnapshot(
                 mIcon.mInfo.getContents(),
-                new RectF(backgroundBounds),
-                itemSize,
-                minPadding,
-                gap,
+                snapshotBounds,
+                grid,
                 mIntrinsicIconSize,
                 isRtl,
                 folderColumnCount);
@@ -332,7 +372,7 @@ public class PreviewItemManager {
         // If there are more params than visible in the preview, they are used for enter/exit
         // animation purposes and they were added to the front of the list.
         // To index the params properly, we need to skip these params.
-        if (!mIcon.isMultiSpanFolder()) {
+        if (!mIcon.usesWorkspacePreviewLayout()) {
             paramIndex += Math.max(
                 mFirstPageParams.size() - MAX_NUM_ITEMS_IN_PREVIEW,
                 0);
@@ -391,8 +431,8 @@ public class PreviewItemManager {
     }
 
     void buildParamsForPage(int page, ArrayList<PreviewItemDrawingParams> params, boolean animate) {
-        if (page == 0 && mIcon.isMultiSpanFolder() && mIntrinsicIconSize > 0) {
-            applySnapshot(calculateMultiSpanPreviewSnapshot(), params);
+        if (page == 0 && mIcon.usesWorkspacePreviewLayout() && mIntrinsicIconSize > 0) {
+            applySnapshot(calculateWorkspacePreviewSnapshot(), params);
             return;
         }
 
@@ -510,7 +550,7 @@ public class PreviewItemManager {
         final ArrayList<PreviewItemDrawingParams> params = mFirstPageParams;
         buildParamsForPage(0, params, false);
 
-        if (mIcon.isMultiSpanFolder()) {
+        if (mIcon.usesWorkspacePreviewLayout()) {
             onParamsChanged();
             return;
         }

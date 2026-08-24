@@ -167,6 +167,11 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
                 && (mInfo.spanX > 1 || mInfo.spanY > 1);
     }
 
+    boolean usesWorkspacePreviewLayout() {
+        return mInfo != null
+                && mInfo.container == LauncherSettings.Favorites.CONTAINER_DESKTOP;
+    }
+
     private void updateTextVisibility() {
         mFolderName.setVisibility(
                         mRequestedTextVisible
@@ -642,6 +647,18 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
 
     public PreviewItemManager getPreviewItemManager() {
         return mPreviewItemManager;
+    }
+
+    public boolean isPreviewTightlyWrapped(
+            int availableSpaceX,
+            int availableSpaceY,
+            int spanX,
+            int spanY) {
+        return mPreviewItemManager.isPreviewTightlyWrapped(
+            availableSpaceX,
+            availableSpaceY,
+            spanX,
+            spanY);
     }
 
     @Override
