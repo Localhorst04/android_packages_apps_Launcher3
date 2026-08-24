@@ -175,7 +175,7 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
 
     private boolean mRequestedTextVisible = true;
 
-    private boolean isExpandedFolder() {
+    boolean isMultiSpanFolder() {
         return mInfo != null
                 && mInfo.container == LauncherSettings.Favorites.CONTAINER_DESKTOP
                 && (mInfo.spanX > 1 || mInfo.spanY > 1);
@@ -184,7 +184,7 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
     private void updateTextVisibility() {
         mFolderName.setVisibility(
                         mRequestedTextVisible
-                        && !isExpandedFolder()
+                        && !isMultiSpanFolder()
                         ? VISIBLE : INVISIBLE);
     }
 
