@@ -18,7 +18,6 @@ package com.android.launcher3.folder;
 
 import static com.android.launcher3.BubbleTextView.DISPLAY_FOLDER;
 import static com.android.launcher3.LauncherPrefsExt.ALLAPPS_THEMED_ICONS;
-import static com.android.launcher3.LauncherSettings.Favorites.CONTAINER_DESKTOP;
 import static com.android.launcher3.LauncherSettings.Favorites.DESKTOP_ICON_FLAG;
 import static com.android.launcher3.Utilities.dpToPx;
 import static com.android.launcher3.folder.ClippedFolderIconLayoutRule.ENTER_INDEX;
@@ -163,12 +162,8 @@ public class PreviewItemManager {
     }
 
     private void computePreviewDrawingParams(int drawableSize, int totalWidth, int totalHeight) {
-        int spanX = 1;
-        int spanY = 1;
-        if (mIcon.mInfo.container == CONTAINER_DESKTOP) {
-            spanX = mIcon.mInfo.spanX;
-            spanY = mIcon.mInfo.spanY;
-        }
+        int spanX = mIcon.getCurrentSpanX();
+        int spanY = mIcon.getCurrentSpanY();
 
         if (mIntrinsicIconSize != drawableSize
                 || mTotalWidth != totalWidth
