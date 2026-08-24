@@ -36,7 +36,6 @@ import androidx.annotation.VisibleForTesting
 import androidx.core.view.children
 import com.android.launcher3.AppWidgetResizeFrame.Companion.DragHandles.Companion.HANDLE_COUNT
 import com.android.launcher3.DropTarget.DragObject
-import com.android.launcher3.LauncherAppState.Companion.getIDP
 import com.android.launcher3.LauncherConstants.ActivityCodes
 import com.android.launcher3.LauncherPrefs.Companion.get
 import com.android.launcher3.accessibility.DragViewStateAnnouncer
@@ -45,7 +44,6 @@ import com.android.launcher3.dragndrop.DragController
 import com.android.launcher3.dragndrop.DragLayer
 import com.android.launcher3.dragndrop.DragOptions
 import com.android.launcher3.keyboard.ViewGroupFocusHelper
-import com.android.launcher3.logging.InstanceId
 import com.android.launcher3.logging.InstanceIdSequence
 import com.android.launcher3.logging.StatsLogManager.LauncherEvent
 import com.android.launcher3.model.data.ItemInfo
@@ -74,12 +72,23 @@ private interface ResizeTarget {
     fun canResizeTo(cellX: Int, cellY: Int, spanX: Int, spanY: Int): Boolean
 
     fun onResizeApplied(spanX: Int, spanY: Int, committed: Boolean)
+
+    fun onFrameSetup() {}
+
+    fun onFrameDetached() {}
 }
 
 private class WidgetResizeTarget(
     val widgetView: LauncherAppWidgetHostView,
     providerInfo: LauncherAppWidgetProviderInfo,
+    private val launcher: Launcher,
+    private val updateFrameAppearance: () -> Unit,
 ) : ResizeTarget {
+    private val logInstanceId = InstanceIdSequence().newInstanceId()
+    private val layoutListener = OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+        updateFrameAppearance()
+    }
+
     override val view: View = widgetView
     override val itemInfo: ItemInfo = widgetView.tag as LauncherAppWidgetInfo
     override val minSpanX: Int = providerInfo.minSpanX
@@ -97,6 +106,27 @@ private class WidgetResizeTarget(
         if (!committed) {
             widgetView.updateSizeRanges(spanX, spanY)
         }
+    }
+
+    override fun onFrameSetup() {
+        launcher.statsLogManager
+            .logger()
+            .withInstanceId(logInstanceId)
+            .withItemInfo(itemInfo)
+            .log(LauncherEvent.LAUNCHER_WIDGET_RESIZE_STARTED)
+
+        updateFrameAppearance()
+        widgetView.addOnLayoutChangeListener(layoutListener)
+    }
+
+    override fun onFrameDetached() {
+        launcher.statsLogManager
+            .logger()
+            .withInstanceId(logInstanceId)
+            .withItemInfo(itemInfo)
+            .log(LauncherEvent.LAUNCHER_WIDGET_RESIZE_COMPLETED)
+
+        widgetView.removeOnLayoutChangeListener(layoutListener)
     }
 }
 
@@ -116,7 +146,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var systemGestureExclusionRectsHolder: List<Rect>
 
     private lateinit var dragHandles: DragHandles
-    private lateinit var widgetView: LauncherAppWidgetHostView
     private lateinit var resizeTarget: ResizeTarget
     private lateinit var cellLayout: CellLayout
     private lateinit var dragLayer: DragLayer
@@ -138,8 +167,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private val deltaYRange = IntRange()
     private val baselineYRange = IntRange()
-
-    private val logInstanceId: InstanceId = InstanceIdSequence().newInstanceId()
 
     private val dragLayerRelativeCoordinateHelper: ViewGroupFocusHelper
 
@@ -169,8 +196,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var topTouchRegionAdjustment = 0
     private var bottomTouchRegionAdjustment = 0
 
-    private val widgetViewLayoutListener: OnLayoutChangeListener
-
     private var xDown = 0
     private var yDown = 0
 
@@ -190,10 +215,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 )
                 .toFloat()
         dragLayerRelativeCoordinateHelper = ViewGroupFocusHelper(launcher.dragLayer)
-
-        widgetViewLayoutListener = OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            setCornerRadiusFromWidget()
-        }
     }
 
     override fun onFinishInflate() {
@@ -221,7 +242,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         systemGestureExclusionRects = systemGestureExclusionRectsHolder
     }
 
-    private fun setCornerRadiusFromWidget() {
+    private fun setCornerRadiusFromWidget(widgetView: LauncherAppWidgetHostView) {
         if (widgetView.hasEnforcedCornerRadius()) {
             val resizeFrame = findViewById<ImageView>(R.id.widget_resize_frame)
             resizeFrame.drawable.let { drawable ->
@@ -236,25 +257,37 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     /** Retrieves the view where accessibility actions happen. */
     fun getViewForAccessibility(): View = resizeTarget.view
 
+    private fun setupForTarget(target: ResizeTarget, cellLayout: CellLayout, dragLayer: DragLayer) {
+        this.resizeTarget = target
+        this.cellLayout = cellLayout
+        this.dragLayer = dragLayer
+
+        val itemInfo = target.itemInfo
+        val presenterPos = launcher.cellPosMapper.mapModelToPresenter(itemInfo)
+
+        (target.view.layoutParams as CellLayoutLayoutParams).apply {
+            cellX = presenterPos.cellX
+            tmpCellX = presenterPos.cellX
+            cellY = presenterPos.cellY
+            tmpCellY = presenterPos.cellY
+            cellHSpan = itemInfo.spanX
+            cellVSpan = itemInfo.spanY
+            isLockedToGrid = true
+        }
+
+        // Temporarily release the target's cells while evaluating the resize placements.
+        cellLayout.markCellsAsUnoccupiedForView(target.view)
+
+        setOnKeyListener(this)
+        target.onFrameSetup()
+    }
+
     /** Initializes a resize frame that can be shown around the provided [widgetView]. */
     private fun setupForWidget(
         widgetView: LauncherAppWidgetHostView,
         cellLayout: CellLayout,
         dragLayer: DragLayer,
     ) {
-        fun initializeWidgetViewLayoutParams(widgetInfo: ItemInfo) {
-            val presenterPos = launcher.cellPosMapper.mapModelToPresenter(widgetInfo)
-            (this.widgetView.layoutParams as CellLayoutLayoutParams).apply {
-                cellX = presenterPos.cellX
-                tmpCellX = presenterPos.cellX
-                cellY = presenterPos.cellY
-                tmpCellY = presenterPos.cellY
-                cellHSpan = widgetInfo.spanX
-                cellVSpan = widgetInfo.spanY
-                isLockedToGrid = true
-            }
-        }
-
         @Deprecated("Will be removed as part of homeScreenEditImprovements flag")
         fun initializeReconfigureButton() {
             reconfigureButton =
@@ -263,14 +296,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     setOnClickListener {
                         launcher.setWaitingForResult(
                             PendingRequestArgs.forWidgetInfo(
-                                this@AppWidgetResizeFrame.widgetView.appWidgetId,
+                                widgetView.appWidgetId,
                                 /* widgetHandler= */ null, // since reconfiguring existing widget.
-                                this@AppWidgetResizeFrame.widgetView.tag as ItemInfo,
+                                widgetView.tag as ItemInfo,
                             )
                         )
                         launcher.appWidgetHolder?.startConfigActivity(
                             launcher,
-                            this@AppWidgetResizeFrame.widgetView.appWidgetId,
+                            widgetView.appWidgetId,
                             ActivityCodes.REQUEST_RECONFIGURE_APPWIDGET,
                         )
                     }
@@ -285,35 +318,20 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             }
         }
 
-        this.cellLayout = cellLayout
-        this.widgetView = widgetView
         val info = widgetView.appWidgetInfo as LauncherAppWidgetProviderInfo
-        this.resizeTarget = WidgetResizeTarget(widgetView, info)
-        this.dragLayer = dragLayer
-
-        val widgetInfoOnView = this.widgetView.tag as LauncherAppWidgetInfo
-        val idp = getIDP(cellLayout.context)
+        val target =
+            WidgetResizeTarget(
+                widgetView = widgetView,
+                providerInfo = info,
+                launcher = launcher,
+                updateFrameAppearance = { setCornerRadiusFromWidget(widgetView) },
+            )
 
         if (!Flags.homeScreenEditImprovements() && info.isReconfigurable) {
             initializeReconfigureButton()
         }
 
-        initializeWidgetViewLayoutParams(widgetInfoOnView)
-
-        // When we create the resize frame, we first mark all cells as unoccupied. The appropriate
-        // cells (same if not resized, or different) will be marked as occupied when the resize
-        // frame is dismissed.
-        this.cellLayout.markCellsAsUnoccupiedForView(resizeTarget.view)
-
-        launcher.statsLogManager
-            .logger()
-            .withInstanceId(logInstanceId)
-            .withItemInfo(widgetInfoOnView)
-            .log(LauncherEvent.LAUNCHER_WIDGET_RESIZE_STARTED)
-
-        setOnKeyListener(this)
-        setCornerRadiusFromWidget()
-        this.widgetView.addOnLayoutChangeListener(widgetViewLayoutListener)
+        setupForTarget(target, cellLayout, dragLayer)
     }
 
     /**
@@ -552,13 +570,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         super.onDetachedFromWindow()
 
         launcher.dragController.removeDragListener(this)
-        // We are done with resizing the widget. Save the widget size & position to LauncherModel
+        // Commit the final target size and position to LauncherModel.
         resizeTargetIfNeeded(true)
-        launcher.statsLogManager
-            .logger()
-            .withInstanceId(logInstanceId)
-            .withItemInfo(resizeTarget.itemInfo)
-            .log(LauncherEvent.LAUNCHER_WIDGET_RESIZE_COMPLETED)
+        resizeTarget.onFrameDetached()
     }
 
     private fun onTouchUp() {
@@ -771,7 +785,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     override fun handleClose(animate: Boolean) {
         dragLayer.removeView(this)
-        widgetView.removeOnLayoutChangeListener(widgetViewLayoutListener)
         launcher.dragController.removeDragListener(this)
     }
 
