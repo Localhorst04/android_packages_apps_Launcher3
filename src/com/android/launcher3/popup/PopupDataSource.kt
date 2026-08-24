@@ -286,7 +286,7 @@ class PopupDataSource @Inject constructor() {
     private val handleResizeFolder = { activityContext: ActivityContext, _: ItemInfo, view: View ->
         if (view is FolderIcon) {
             AbstractFloatingView.closeAllOpenViews(activityContext)
-            Launcher.getLauncher(view.context).workspace.toggleFolderWidth(view)
+            Launcher.getLauncher(view.context).workspace.toggleFolderSize(view)
         }
     }
     // Popup data for resize folder shortcut
