@@ -176,9 +176,23 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
     private boolean mRequestedTextVisible = true;
 
     boolean isMultiSpanFolder() {
-        return mInfo != null
-                && mInfo.container == LauncherSettings.Favorites.CONTAINER_DESKTOP
-                && (mInfo.spanX > 1 || mInfo.spanY > 1);
+        return getCurrentSpanX() > 1 || getCurrentSpanY() > 1;
+    }
+
+    int getCurrentSpanX() {
+        if (!usesWorkspacePreviewLayout()) return 1;
+
+        return getLayoutParams() instanceof CellLayoutLayoutParams lp
+                ? lp.cellHSpan
+                : mInfo.spanX;
+    }
+
+    int getCurrentSpanY() {
+        if (!usesWorkspacePreviewLayout()) return 1;
+
+        return getLayoutParams() instanceof CellLayoutLayoutParams lp
+                ? lp.cellVSpan
+                : mInfo.spanY;
     }
 
     boolean usesWorkspacePreviewLayout() {
