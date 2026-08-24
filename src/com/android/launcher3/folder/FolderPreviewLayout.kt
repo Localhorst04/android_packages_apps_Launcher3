@@ -160,23 +160,22 @@ object FolderPreviewLayout {
     }
 
     @JvmStatic
+    fun isTightlyWrapped(itemCount: Int, grid: Grid): Boolean {
+        val occupiedSlots = minOf(itemCount, grid.capacity)
+
+        return occupiedSlots >= grid.columns && occupiedSlots > (grid.rows - 1) * grid.columns
+    }
+
+    @JvmStatic
     fun calculateSnapshot(
         items: List<ItemInfo>,
         backgroundBounds: RectF,
-        itemSize: Float,
-        minPadding: Float,
-        gap: Float,
+        grid: Grid,
         intrinsicIconSize: Float,
         isRtl: Boolean,
         folderColumnCount: Int,
     ): Snapshot {
-        require(minPadding >= 0f)
-
         val snapshotBounds = RectF(backgroundBounds)
-        val availableBounds = RectF(snapshotBounds)
-        availableBounds.inset(minPadding, minPadding)
-
-        val grid = calculateGrid(availableBounds, itemSize, gap)
         val selection = selectItems(items, grid.capacity)
 
         val directPlacements = calculateDirectPlacements(selection.directItems, grid, isRtl)
