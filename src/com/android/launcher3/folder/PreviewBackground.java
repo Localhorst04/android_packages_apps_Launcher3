@@ -142,6 +142,41 @@ public class PreviewBackground extends DelegatedCellDrawing {
                 }
             };
 
+    static void calculateBackgroundBounds(
+            DeviceProfile grid,
+            int availableSpaceX,
+            int availableSpaceY,
+            int topPadding,
+            int spanX,
+            int spanY,
+            Rect outBounds) {
+        int previewSize = grid.folderIconSizePx;
+        int cellWidth = grid.getWorkspaceIconProfile().getCellSize().x;
+        int cellHeight = grid.getWorkspaceIconProfile().getCellSize().y;
+
+        int backgroundWidth = previewSize;
+        int backgroundHeight = previewSize;
+
+        if (spanX > 1) {
+            backgroundWidth += Math.max(0, availableSpaceX - cellWidth);
+        }
+
+        if (spanY > 1) {
+            backgroundHeight += Math.max(0, availableSpaceY - cellHeight);
+        }
+
+        int backgroundLeft = (availableSpaceX - backgroundWidth) / 2;
+        int backgroundTop = spanY > 1
+                ? (availableSpaceY - backgroundHeight) / 2
+                : topPadding + grid.folderIconOffsetYPx;
+
+        outBounds.set(
+            backgroundLeft,
+            backgroundTop,
+            backgroundLeft + backgroundWidth,
+            backgroundTop + backgroundHeight);
+    }
+
     public PreviewBackground(Context context) {
         mContext = context;
     }
@@ -179,30 +214,14 @@ public class PreviewBackground extends DelegatedCellDrawing {
         DeviceProfile grid = activity.getDeviceProfile();
         previewSize = grid.folderIconSizePx;
 
-        int cellWidth = grid.getWorkspaceIconProfile().getCellSize().x;
-        int cellHeight = grid.getWorkspaceIconProfile().getCellSize().y;
-
-        int backgroundWidth = previewSize;
-        int backgroundHeight = previewSize;
-
-        if (spanX > 1) {
-            backgroundWidth += Math.max(0, availableSpaceX - cellWidth);
-        }
-
-        if (spanY > 1) {
-            backgroundHeight += Math.max(0, availableSpaceY - cellHeight);
-        }
-
-        int backgroundLeft = (availableSpaceX - backgroundWidth) / 2;
-        int backgroundTop = spanY > 1
-                ? (availableSpaceY - backgroundHeight) / 2
-                : topPadding + grid.folderIconOffsetYPx;
-
-        mBackgroundBounds.set(
-            backgroundLeft,
-            backgroundTop,
-            backgroundLeft + backgroundWidth,
-            backgroundTop + backgroundHeight);
+        calculateBackgroundBounds(
+            grid,
+            availableSpaceX,
+            availableSpaceY,
+            topPadding,
+            spanX,
+            spanY,
+            mBackgroundBounds);
 
         // Stroke width is 1dp
         mStrokeWidth = context.getResources().getDisplayMetrics().density;
