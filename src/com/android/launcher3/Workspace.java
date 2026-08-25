@@ -3499,14 +3499,32 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
         return allowedSizes;
     }
 
-    public boolean toggleFolderSize(FolderIcon folderIcon) {
-        if (folderIcon == null) return false;
+    public boolean canResizeFolderTo(
+            FolderIcon folderIcon,
+            int cellX,
+            int cellY,
+            int spanX,
+            int spanY) {
+        if (folderIcon == null || spanX <= 0 || spanY <= 0) return false;
         if (!(folderIcon.getLayoutParams() instanceof CellLayoutLayoutParams lp)) return false;
+        if (!(folderIcon.getTag() instanceof FolderInfo folderInfo)) return false;
+        if (folderInfo.container != CONTAINER_DESKTOP) return false;
 
-        boolean isCompact = lp.cellHSpan == 1 && lp.cellVSpan == 1;
-        int targetSpanX = isCompact ? 3 : 1;
-        int targetSpanY = isCompact ? 2 : 1;
-        return resizeFolderToSize(folderIcon, targetSpanX, targetSpanY);
+        CellLayout cellLayout = getParentCellLayoutForView(folderIcon);
+        if (cellLayout == null) return false;
+
+        CellAndSpan target = new CellAndSpan(cellX, cellY, spanX, spanY);
+        Rect resizeBounds = getFolderResizeBounds(cellLayout, lp);
+        if (!isFolderResizeTargetWithinBounds(target, resizeBounds)) return false;
+
+        Rect targetBounds = new Rect();
+        cellLayout.cellToRect(cellX, cellY, spanX, spanY, targetBounds);
+
+        return folderIcon.isPreviewTightlyWrapped(
+            targetBounds.width(),
+            targetBounds.height(),
+            spanX,
+            spanY);
     }
 
     public boolean resizeFolderToSize(
@@ -3566,34 +3584,19 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
     public boolean resizeFolder(FolderIcon folderIcon, CellAndSpan target, int[] direction) {
         if (folderIcon == null
                 || target == null
-                || target.spanX <= 0
-                || target.spanY <= 0
                 || direction == null
                 || direction.length != 2) return false;
 
+        if (!canResizeFolderTo(
+                folderIcon,
+                target.cellX,
+                target.cellY,
+                target.spanX,
+                target.spanY)) return false;
+
         CellLayout cellLayout = getParentCellLayoutForView(folderIcon);
         if (cellLayout == null) return false;
-
         if (!(folderIcon.getTag() instanceof FolderInfo folderInfo)) return false;
-        if (!(folderIcon.getLayoutParams() instanceof CellLayoutLayoutParams lp)) return false;
-        if (folderInfo.container != CONTAINER_DESKTOP) return false;
-
-        Rect resizeBounds = getFolderResizeBounds(cellLayout, lp);
-        if (!isFolderResizeTargetWithinBounds(target, resizeBounds)) return false;
-
-        Rect targetBounds = new Rect();
-        cellLayout.cellToRect(
-            target.cellX,
-            target.cellY,
-            target.spanX,
-            target.spanY,
-            targetBounds);
-
-        if (!folderIcon.isPreviewTightlyWrapped(
-            targetBounds.width(),
-            targetBounds.height(),
-            target.spanX,
-            target.spanY)) return false;
 
         int oldMinSpanX = folderInfo.minSpanX;
         int oldMinSpanY = folderInfo.minSpanY;

@@ -24,7 +24,6 @@ import com.android.launcher3.AbstractFloatingView
 import com.android.launcher3.AbstractFloatingViewHelper
 import com.android.launcher3.DropTargetHandler
 import com.android.launcher3.Flags
-import com.android.launcher3.Launcher
 import com.android.launcher3.LauncherConstants
 import com.android.launcher3.R
 import com.android.launcher3.SecondaryDropTarget
@@ -32,7 +31,6 @@ import com.android.launcher3.Utilities
 import com.android.launcher3.accessibility.LauncherAccessibilityDelegate
 import com.android.launcher3.allapps.PrivateProfileManager
 import com.android.launcher3.dagger.LauncherAppSingleton
-import com.android.launcher3.folder.FolderIcon
 import com.android.launcher3.logging.StatsLogManager.LauncherEvent
 import com.android.launcher3.model.data.ItemInfo
 import com.android.launcher3.model.data.WorkspaceItemInfo
@@ -281,21 +279,6 @@ class PopupDataSource @Inject constructor() {
             labelResId = R.string.uninstall_private_system_shortcut_label,
             popupAction = handleUninstallApp,
             category = PopupCategory.SYSTEM_SHORTCUT,
-        )
-
-    private val handleResizeFolder = { activityContext: ActivityContext, _: ItemInfo, view: View ->
-        if (view is FolderIcon) {
-            AbstractFloatingView.closeAllOpenViews(activityContext)
-            Launcher.getLauncher(view.context).workspace.toggleFolderSize(view)
-        }
-    }
-    // Popup data for resize folder shortcut
-    val resizeFolderPopupData =
-        PopupData(
-            iconResId = R.drawable.ic_aspect_ratio,
-            labelResId = R.string.action_resize,
-            popupAction = handleResizeFolder,
-            category = PopupCategory.SYSTEM_SHORTCUT_FIXED,
         )
 
     // Handles action when tapping bubble shortcut.

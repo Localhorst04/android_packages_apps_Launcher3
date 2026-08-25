@@ -22,6 +22,7 @@ import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
+import android.graphics.Point
 import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
@@ -43,9 +44,11 @@ import com.android.launcher3.celllayout.CellLayoutLayoutParams
 import com.android.launcher3.dragndrop.DragController
 import com.android.launcher3.dragndrop.DragLayer
 import com.android.launcher3.dragndrop.DragOptions
+import com.android.launcher3.folder.FolderIcon
 import com.android.launcher3.keyboard.ViewGroupFocusHelper
 import com.android.launcher3.logging.InstanceIdSequence
 import com.android.launcher3.logging.StatsLogManager.LauncherEvent
+import com.android.launcher3.model.data.FolderInfo
 import com.android.launcher3.model.data.ItemInfo
 import com.android.launcher3.model.data.LauncherAppWidgetInfo
 import com.android.launcher3.popup.PopupContainer.Companion.getOpen
@@ -76,6 +79,8 @@ private interface ResizeTarget {
     fun onFrameSetup() {}
 
     fun onFrameDetached() {}
+
+    fun getResizeAnnouncement(context: Context, spanX: Int, spanY: Int): CharSequence? = null
 }
 
 private class WidgetResizeTarget(
@@ -128,11 +133,63 @@ private class WidgetResizeTarget(
 
         widgetView.removeOnLayoutChangeListener(layoutListener)
     }
+
+    override fun getResizeAnnouncement(context: Context, spanX: Int, spanY: Int): CharSequence =
+        context.getString(R.string.widget_resized, spanX, spanY)
+}
+
+private class FolderResizeTarget(
+    private val folderIcon: FolderIcon,
+    private val workspace: Workspace<*>,
+    allowedSizes: List<Point>,
+) : ResizeTarget {
+    private val folderInfo = folderIcon.tag as FolderInfo
+
+    private val initialCellX: Int
+    private val initialCellY: Int
+    private val initialSpanX: Int
+    private val initialSpanY: Int
+    private val supportedSizes: List<Point>
+
+    init {
+        val lp = folderIcon.layoutParams as CellLayoutLayoutParams
+        initialCellX = lp.cellX
+        initialCellY = lp.cellY
+        initialSpanX = lp.cellHSpan
+        initialSpanY = lp.cellVSpan
+        supportedSizes = (allowedSizes + Point(initialSpanX, initialSpanY)).distinct()
+    }
+
+    override val view: View = folderIcon
+    override val itemInfo: ItemInfo = folderInfo
+    override val minSpanX: Int = supportedSizes.minOf { it.x }
+    override val minSpanY: Int = supportedSizes.minOf { it.y }
+    override val maxSpanX: Int = supportedSizes.maxOf { it.x }
+    override val maxSpanY: Int = supportedSizes.maxOf { it.y }
+    override val visualScale: Float = 1f
+
+    override fun canResizeTo(cellX: Int, cellY: Int, spanX: Int, spanY: Int): Boolean {
+        val isInitialGeometry =
+            cellX == initialCellX &&
+                cellY == initialCellY &&
+                spanX == initialSpanX &&
+                spanY == initialSpanY
+
+        return isInitialGeometry ||
+            workspace.canResizeFolderTo(folderIcon, cellX, cellY, spanX, spanY)
+    }
+
+    override fun onResizeApplied(spanX: Int, spanY: Int, committed: Boolean) {
+        if (committed) {
+            folderInfo.minSpanX = spanX
+            folderInfo.minSpanY = spanY
+        }
+    }
 }
 
 /**
- * A floating view representing the frame shown with resize handles (dots) around the widgets when
- * you hold press it.
+ * A floating frame with resize handles (dots) shown around resizable workspace items
+ * after long-pressing.
  */
 class AppWidgetResizeFrame
 @JvmOverloads
@@ -198,6 +255,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private var xDown = 0
     private var yDown = 0
+    private var ignoreCurrentTouchSequence = false
 
     init {
         launcher.dragController.addDragListener(this)
@@ -330,6 +388,22 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (!Flags.homeScreenEditImprovements() && info.isReconfigurable) {
             initializeReconfigureButton()
         }
+
+        setupForTarget(target, cellLayout, dragLayer)
+    }
+
+    private fun setupForFolder(
+        folderIcon: FolderIcon,
+        cellLayout: CellLayout,
+        dragLayer: DragLayer,
+    ) {
+        val workspace = launcher.workspace
+        val target =
+            FolderResizeTarget(
+                folderIcon = folderIcon,
+                workspace = workspace,
+                allowedSizes = workspace.getAllowedFolderSizes(folderIcon),
+            )
 
         setupForTarget(target, cellLayout, dragLayer)
     }
@@ -551,7 +625,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 )
         ) {
             if (wlp.cellHSpan != spanX || wlp.cellVSpan != spanY) {
-                stateAnnouncer?.announce(launcher.getString(R.string.widget_resized, spanX, spanY))
+                resizeTarget.getResizeAnnouncement(launcher, spanX, spanY)?.let {
+                    stateAnnouncer?.announce(it)
+                }
             }
 
             wlp.tmpCellX = cellX
@@ -757,6 +833,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     override fun onControllerInterceptTouchEvent(ev: MotionEvent): Boolean {
+        if (ignoreCurrentTouchSequence) {
+            if (ev.action != MotionEvent.ACTION_DOWN) return false
+            ignoreCurrentTouchSequence = false
+        }
+
         if (ev.action == MotionEvent.ACTION_DOWN && handleTouchDown(ev)) {
             return true
         }
@@ -766,7 +847,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             return false
         }
 
-        if (Flags.homeScreenEditImprovements()) {
+        if (Flags.homeScreenEditImprovements() || resizeTarget is FolderResizeTarget) {
             if (shouldIgnoreTouch()) {
                 return false
             }
@@ -1037,6 +1118,35 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
             dragLayer.addView(frame)
             frame.mIsOpen = true
+            frame.post { frame.snapToTarget(false) }
+        }
+
+        @JvmStatic
+        fun showForFolder(folderIcon: FolderIcon?, cellLayout: CellLayout) {
+            if (folderIcon == null || folderIcon.parent == null) return
+
+            val activityContext = cellLayout.mActivity
+            val dragLayer = activityContext.dragLayer as DragLayer
+
+            closeAllOpenViewsExcept(activityContext, TYPE_ACTION_POPUP)
+
+            val frame =
+                activityContext.layoutInflater.inflate(
+                    R.layout.app_widget_resize_frame,
+                    /* root= */ dragLayer,
+                    /* attachToRoot= */ false,
+                ) as AppWidgetResizeFrame
+
+            frame.apply {
+                ignoreCurrentTouchSequence = launcher.isTouchInProgress
+                setupForFolder(folderIcon, cellLayout, dragLayer)
+                tag = folderIcon.tag
+                (layoutParams as BaseDragLayer.LayoutParams).customPosition = true
+            }
+
+            dragLayer.addView(frame)
+            frame.mIsOpen = true
+
             frame.post { frame.snapToTarget(false) }
         }
 
