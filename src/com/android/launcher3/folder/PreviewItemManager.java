@@ -210,13 +210,12 @@ public class PreviewItemManager {
         float gap =
                 resources.getDimension(R.dimen.folder_workspace_preview_gap);
 
-        float maxItemSize =
-                Math.min(backgroundBounds.width(), backgroundBounds.height())
-                        - 2 * minPadding;
-        float itemSize = Math.min(directIconSize * itemScale, maxItemSize);
-
         RectF availableBounds = new RectF(backgroundBounds);
         availableBounds.inset(minPadding, minPadding);
+
+        float maxItemSize =
+                Math.min(availableBounds.width(), availableBounds.height());
+        float itemSize = Math.min(directIconSize * itemScale, maxItemSize);
 
         return FolderPreviewLayout.calculateGrid(availableBounds, itemSize, gap);
     }
