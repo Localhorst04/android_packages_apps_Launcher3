@@ -47,8 +47,7 @@ constructor(
         listOf(popupDataSource.removePopupData, popupDataSource.widgetSettingsPopupData)
 
     private val folderSystemShortcuts = listOf(popupDataSource.removePopupData)
-    private val desktopFolderSystemShortcuts =
-        listOf(popupDataSource.removePopupData, popupDataSource.resizeFolderPopupData)
+    private val desktopFolderSystemShortcuts = folderSystemShortcuts
 
     private var popupData: Map<Int, List<PopupData>> = mapOf()
 
