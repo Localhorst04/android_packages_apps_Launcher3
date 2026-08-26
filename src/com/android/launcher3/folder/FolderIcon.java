@@ -175,6 +175,12 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
 
     private boolean mRequestedTextVisible = true;
 
+    private boolean shouldShowFolderName() {
+        return mRequestedTextVisible
+                && !isMultiSpanFolder()
+                && mFolderName.shouldShowLabel();
+    }
+
     boolean isMultiSpanFolder() {
         return getCurrentSpanX() > 1 || getCurrentSpanY() > 1;
     }
@@ -201,10 +207,7 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
     }
 
     private void updateTextVisibility() {
-        mFolderName.setVisibility(
-                        mRequestedTextVisible
-                        && !isMultiSpanFolder()
-                        ? VISIBLE : INVISIBLE);
+        mFolderName.setVisibility(shouldShowFolderName() ? VISIBLE : INVISIBLE);
     }
 
     public FolderIcon(Context context) {
@@ -770,7 +773,7 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         boolean isAllAppsFolder = AxFolderExt.isAllAppsFolder(mInfo);
         boolean shouldCenterIcon = isAllAppsFolder
                 || mActivity.getDeviceProfile().getWorkspaceIconProfile().getIconCenterVertically()
-                || !mFolderName.shouldShowLabel();
+                || !shouldShowFolderName();
 
         updateTextVisibility();
 
@@ -779,7 +782,7 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
                     ? mActivity.getDeviceProfile().getAllAppsProfile().getIconSizePx()
                     : mActivity.getDeviceProfile().getWorkspaceIconProfile().getIconSizePx();
             int cellHeightPx;
-            if (mFolderName.shouldShowLabel()) {
+            if (shouldShowFolderName()) {
                 Paint.FontMetrics fm = mFolderName.getPaint().getFontMetrics();
                 cellHeightPx = iconSize + mFolderName.getCompoundDrawablePadding()
                         + (int) Math.ceil(fm.bottom - fm.top);
