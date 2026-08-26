@@ -863,8 +863,16 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
      * Returns true if the touch down at the provided position be ignored
      */
     protected boolean shouldIgnoreTouchDown(float x, float y) {
-        mTouchArea.set(getPaddingLeft(), getPaddingTop(), getWidth() - getPaddingRight(),
+        if (isMultiSpanFolder()) {
+            mBackground.getBounds(mTouchArea);
+        } else {
+            mTouchArea.set(
+                getPaddingLeft(),
+                getPaddingTop(),
+                getWidth() - getPaddingRight(),
                 getHeight() - getPaddingBottom());
+        }
+
         return !mTouchArea.contains((int) x, (int) y);
     }
 
