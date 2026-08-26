@@ -347,10 +347,12 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
             float scaleRelativeToDragLayer) {
         prepareCreateAnimation(destView);
         getFolder().addFolderContent(destInfo);
-        // This will animate the first item from it's position as an icon into its
-        // position as the first item in the preview
-        mPreviewItemManager.createFirstItemAnimation(false /* reverse */, null)
-                .start();
+
+        if (!usesWorkspacePreviewLayout()) {
+            // The legacy animation targets the clipped preview layout,not the workspace snapshot.
+            mPreviewItemManager.createFirstItemAnimation(false /* reverse */, null)
+                    .start();
+        }
 
         // This will animate the dragView (srcView) into the new folder
         onDrop(srcInfo, d, dstRect, scaleRelativeToDragLayer, 1,
