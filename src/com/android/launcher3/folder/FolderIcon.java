@@ -181,10 +181,6 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
                 && mFolderName.shouldShowLabel();
     }
 
-    boolean isMultiSpanFolder() {
-        return getCurrentSpanX() > 1 || getCurrentSpanY() > 1;
-    }
-
     int getCurrentSpanX() {
         if (!usesWorkspacePreviewLayout()) return 1;
 
@@ -317,12 +313,22 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         mFolder = folder;
     }
 
+    public boolean isMultiSpanFolder() {
+        return getCurrentSpanX() > 1 || getCurrentSpanY() > 1;
+    }
+
     private boolean willAcceptItem(ItemInfo item) {
         return (willAcceptItemType(item.itemType) && item != mInfo && !mFolder.isOpen());
     }
 
     public boolean acceptDrop(ItemInfo dragInfo) {
         return !mFolder.isDestroyed() && willAcceptItem(dragInfo);
+    }
+
+    /** Returns whether a point in this view's coordinates is inside the background bounds. */
+    public boolean isPointInBackground(float x, float y) {
+        mBackground.getBounds(mTouchArea);
+        return mTouchArea.contains((int) x, (int) y);
     }
 
     public void onDragEnter(ItemInfo dragInfo) {
@@ -864,15 +870,14 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
      */
     protected boolean shouldIgnoreTouchDown(float x, float y) {
         if (isMultiSpanFolder()) {
-            mBackground.getBounds(mTouchArea);
-        } else {
-            mTouchArea.set(
+            return !isPointInBackground(x, y);
+        }
+
+        mTouchArea.set(
                 getPaddingLeft(),
                 getPaddingTop(),
                 getWidth() - getPaddingRight(),
                 getHeight() - getPaddingBottom());
-        }
-
         return !mTouchArea.contains((int) x, (int) y);
     }
 

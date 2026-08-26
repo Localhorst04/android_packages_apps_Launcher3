@@ -2013,12 +2013,29 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
         return (aboveShortcut && willBecomeShortcut);
     }
 
-    boolean willAddToExistingUserFolder(ItemInfo dragInfo, CellLayout target, int[] targetCell,
-                                        float distance) {
-        if (distance > target.getFolderCreationRadius(targetCell)) return false;
-        View dropOverView = target.getChildAt(targetCell[0], targetCell[1]);
-        return willAddToExistingUserFolder(dragInfo, dropOverView);
+    private boolean isWithinFolderDropArea(
+            FolderIcon folderIcon, CellLayout target, int[] targetCell, float distance) {
+        if (!folderIcon.isMultiSpanFolder()) {
+            return distance <= target.getFolderCreationRadius(targetCell);
+        }
 
+        mTempFXY[0] = mDragViewVisualCenter[0];
+        mTempFXY[1] = mDragViewVisualCenter[1];
+        Utilities.mapCoordInSelfToDescendant(folderIcon, target, mTempFXY);
+
+        return folderIcon.isPointInBackground(mTempFXY[0], mTempFXY[1]);
+    }
+
+    boolean willAddToExistingUserFolder(
+            ItemInfo dragInfo, CellLayout target, int[] targetCell, float distance) {
+        View dropOverView = target.getChildAt(targetCell[0], targetCell[1]);
+
+        if (!(dropOverView instanceof FolderIcon folderIcon)
+                || !isWithinFolderDropArea(folderIcon, target, targetCell, distance)) {
+            return false;
+        }
+
+        return willAddToExistingUserFolder(dragInfo, dropOverView);
     }
 
     boolean willAddToExistingUserFolder(ItemInfo dragInfo, View dropOverView) {
@@ -2096,28 +2113,37 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
         return false;
     }
 
-    boolean addToExistingFolderIfNecessary(View newView, CellLayout target, int[] targetCell,
-            float distance, DragObject d, boolean external) {
-        if (distance > target.getFolderCreationRadius(targetCell)) return false;
-
+    boolean addToExistingFolderIfNecessary(
+            View newView,
+            CellLayout target,
+            int[] targetCell,
+            float distance,
+            DragObject d,
+            boolean external) {
         View dropOverView = target.getChildAt(targetCell[0], targetCell[1]);
+
+        if (!(dropOverView instanceof FolderIcon folderIcon)
+                || !isWithinFolderDropArea(folderIcon, target, targetCell, distance)) {
+            return false;
+        }
+
         if (!mAddToExistingFolderOnDrop) return false;
         mAddToExistingFolderOnDrop = false;
 
-        if (dropOverView instanceof FolderIcon) {
-            FolderIcon fi = (FolderIcon) dropOverView;
-            if (fi.acceptDrop(d.dragInfo)) {
-                mStatsLogManager.logger().withItemInfo(fi.mInfo).withInstanceId(d.logInstanceId)
-                        .log(LauncherEvent.LAUNCHER_ITEM_DROP_COMPLETED_ON_FOLDER_ICON);
-                fi.onDrop(d, false /* itemReturnedOnFailedDrop */);
-                // if the drag started here, we need to remove it from the workspace
-                if (!external) {
-                    getParentCellLayoutForView(mDragInfo.cell).removeView(mDragInfo.cell);
-                }
-                return true;
-            }
+        if (!folderIcon.acceptDrop(d.dragInfo)) return false;
+
+        mStatsLogManager
+                .logger()
+                .withItemInfo(folderIcon.mInfo)
+                .withInstanceId(d.logInstanceId)
+                .log(LauncherEvent.LAUNCHER_ITEM_DROP_COMPLETED_ON_FOLDER_ICON);
+
+        folderIcon.onDrop(d, false /* itemReturnedOnFailedDrop */);
+
+        if (!external) {
+            getParentCellLayoutForView(mDragInfo.cell).removeView(mDragInfo.cell);
         }
-        return false;
+        return true;
     }
 
     @Override
@@ -2852,17 +2878,27 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
     }
 
     private void manageFolderFeedback(float distance, DragObject dragObject) {
-        if (distance > mDragTargetLayout.getFolderCreationRadius(mTargetCell)) {
-            if ((mDragMode == DRAG_MODE_ADD_TO_FOLDER
-                    || mDragMode == DRAG_MODE_CREATE_FOLDER)) {
+        mDragOverView = mDragTargetLayout.getChildAt(mTargetCell[0], mTargetCell[1]);
+        ItemInfo info = dragObject.dragInfo;
+
+        boolean isWithinFolderCreationArea =
+                distance <= mDragTargetLayout.getFolderCreationRadius(mTargetCell);
+
+        boolean isWithinExistingFolderArea =
+                mDragOverView instanceof FolderIcon folderIcon
+                        && isWithinFolderDropArea(
+                                folderIcon, mDragTargetLayout, mTargetCell, distance);
+
+        if (!isWithinFolderCreationArea && !isWithinExistingFolderArea) {
+            if (mDragMode == DRAG_MODE_ADD_TO_FOLDER || mDragMode == DRAG_MODE_CREATE_FOLDER) {
                 setDragMode(DRAG_MODE_NONE);
             }
             return;
         }
 
-        mDragOverView = mDragTargetLayout.getChildAt(mTargetCell[0], mTargetCell[1]);
-        ItemInfo info = dragObject.dragInfo;
-        boolean userFolderPending = willCreateUserFolder(info, mDragOverView, false);
+        boolean userFolderPending =
+                isWithinFolderCreationArea && willCreateUserFolder(info, mDragOverView, false);
+
         if (mDragMode == DRAG_MODE_NONE && userFolderPending) {
             if (Flags.msdlFeedback()) {
                 mMSDLPlayerWrapper.playToken(MSDLToken.DRAG_INDICATOR_DISCRETE);
@@ -2896,7 +2932,9 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             return;
         }
 
-        boolean willAddToFolder = willAddToExistingUserFolder(info, mDragOverView);
+        boolean willAddToFolder =
+                isWithinExistingFolderArea && willAddToExistingUserFolder(info, mDragOverView);
+
         if (willAddToFolder && mDragMode == DRAG_MODE_NONE) {
             mDragOverFolderIcon = ((FolderIcon) mDragOverView);
             mDragOverFolderIcon.onDragEnter(info);
