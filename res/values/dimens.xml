@@ -375,9 +375,9 @@
     <dimen name="folder_blur_radius">20dp</dimen>
 
     <!-- Workspace folder previews -->
-    <dimen name="folder_workspace_preview_item_scale">0.90</dimen>
-    <dimen name="folder_workspace_preview_min_padding">4dp</dimen>
-    <dimen name="folder_workspace_preview_gap">8dp</dimen>
+    <dimen name="folder_workspace_preview_item_scale">0.80</dimen>
+    <dimen name="folder_workspace_preview_padding">8dp</dimen>
+    <dimen name="folder_workspace_preview_min_gap">4dp</dimen>
 
     <!-- Sizes for managed profile badges -->
     <dimen name="profile_badge_size">24dp</dimen>
