@@ -201,23 +201,24 @@ public class PreviewItemManager {
             RectF backgroundBounds) {
         Resources resources = mContext.getResources();
 
-        float directIconSize = mIcon.mActivity.getDeviceProfile()
-                .getWorkspaceIconProfile().getIconSizePx();
         float itemScale =
                 resources.getFloat(R.dimen.folder_workspace_preview_item_scale);
-        float minPadding =
-                resources.getDimension(R.dimen.folder_workspace_preview_min_padding);
-        float gap =
-                resources.getDimension(R.dimen.folder_workspace_preview_gap);
+        float padding =
+                resources.getDimension(R.dimen.folder_workspace_preview_padding);
+        float minGap =
+                resources.getDimension(R.dimen.folder_workspace_preview_min_gap);
 
         RectF availableBounds = new RectF(backgroundBounds);
-        availableBounds.inset(minPadding, minPadding);
+        availableBounds.inset(padding, padding);
+
+        float baseContentSize =
+                mIcon.mActivity.getDeviceProfile().folderIconSizePx - 2 * padding;
 
         float maxItemSize =
                 Math.min(availableBounds.width(), availableBounds.height());
-        float itemSize = Math.min(directIconSize * itemScale, maxItemSize);
+        float itemSize = Math.min(baseContentSize * itemScale, maxItemSize);
 
-        return FolderPreviewLayout.calculateGrid(availableBounds, itemSize, gap);
+        return FolderPreviewLayout.calculateGrid(availableBounds, itemSize, minGap);
     }
 
     boolean isPreviewTightlyWrapped(

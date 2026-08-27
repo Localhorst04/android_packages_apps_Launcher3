@@ -37,7 +37,8 @@ object FolderPreviewLayout {
         val startX: Float,
         val startY: Float,
         val itemSize: Float,
-        val gap: Float,
+        val columnGap: Float,
+        val rowGap: Float,
     ) {
         val capacity: Int
             get() = columns * rows
@@ -123,27 +124,47 @@ object FolderPreviewLayout {
     }
 
     @JvmStatic
-    fun calculateGrid(availableBounds: RectF, itemSize: Float, gap: Float): Grid {
+    fun calculateGrid(availableBounds: RectF, itemSize: Float, minGap: Float): Grid {
         require(itemSize > 0f)
-        require(gap >= 0f)
+        require(minGap >= 0f)
 
         val availableWidth = availableBounds.width()
         val availableHeight = availableBounds.height()
         require(availableWidth >= itemSize && availableHeight >= itemSize)
 
-        val columns = ((availableWidth + gap) / (itemSize + gap)).toInt()
-        val rows = ((availableHeight + gap) / (itemSize + gap)).toInt()
+        val columns = ((availableWidth + minGap) / (itemSize + minGap)).toInt()
+        val rows = ((availableHeight + minGap) / (itemSize + minGap)).toInt()
 
-        val usedWidth = columns * itemSize + (columns - 1) * gap
-        val usedHeight = rows * itemSize + (rows - 1) * gap
+        val columnGap =
+            if (columns > 1) {
+                (availableWidth - columns * itemSize) / (columns - 1)
+            } else {
+                0f
+            }
+
+        val rowGap =
+            if (rows > 1) {
+                (availableHeight - rows * itemSize) / (rows - 1)
+            } else {
+                0f
+            }
+
+        val startX =
+            if (columns > 1) availableBounds.left
+            else availableBounds.centerX() - itemSize / 2f
+
+        val startY =
+            if (rows > 1) availableBounds.top
+            else availableBounds.centerY() - itemSize / 2f
 
         return Grid(
             columns = columns,
             rows = rows,
-            startX = availableBounds.centerX() - usedWidth / 2f,
-            startY = availableBounds.centerY() - usedHeight / 2f,
+            startX = startX,
+            startY = startY,
             itemSize = itemSize,
-            gap = gap,
+            columnGap = columnGap,
+            rowGap = rowGap,
         )
     }
 
@@ -154,9 +175,14 @@ object FolderPreviewLayout {
         val row = index / grid.columns
         val logicalColumn = index % grid.columns
         val column = if (isRtl) grid.columns - logicalColumn - 1 else logicalColumn
-        val step = grid.itemSize + grid.gap
+        val stepX = grid.itemSize + grid.columnGap
+        val stepY = grid.itemSize + grid.rowGap
 
-        return squareBounds(grid.startX + column * step, grid.startY + row * step, grid.itemSize)
+        return squareBounds(
+            grid.startX + column * stepX,
+            grid.startY + row * stepY,
+            grid.itemSize,
+        )
     }
 
     @JvmStatic
