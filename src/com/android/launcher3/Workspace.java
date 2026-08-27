@@ -2113,6 +2113,21 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
         return false;
     }
 
+    @Nullable
+    private FolderIcon findFolderDropTarget(
+            CellLayout target,
+            int[] targetCell,
+            float distance) {
+        View dropOverView = target.getChildAt(targetCell[0], targetCell[1]);
+
+        if (!(dropOverView instanceof FolderIcon folderIcon)
+                || !isWithinFolderDropArea(folderIcon, target, targetCell, distance)) {
+            return null;
+        }
+
+        return folderIcon;
+    }
+
     boolean addToExistingFolderIfNecessary(
             View newView,
             CellLayout target,
@@ -2120,13 +2135,16 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             float distance,
             DragObject d,
             boolean external) {
-        View dropOverView = target.getChildAt(targetCell[0], targetCell[1]);
+        FolderIcon folderIcon = findFolderDropTarget(target, targetCell, distance);
+        if (folderIcon == null) return false;
 
-        if (!(dropOverView instanceof FolderIcon folderIcon)
-                || !isWithinFolderDropArea(folderIcon, target, targetCell, distance)) {
-            return false;
-        }
+        return addToKnownFolderIfNecessary(folderIcon, d, external);
+    }
 
+    boolean addToKnownFolderIfNecessary(
+            FolderIcon folderIcon,
+            DragObject d,
+            boolean external) {
         if (!mAddToExistingFolderOnDrop) return false;
         mAddToExistingFolderOnDrop = false;
 

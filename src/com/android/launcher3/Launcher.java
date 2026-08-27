@@ -1432,8 +1432,10 @@ public class Launcher extends StatefulActivity<LauncherState>
                         true, dragObject)) {
                     return;
                 }
-                if (mWorkspace.addToExistingFolderIfNecessary(view, layout, cellXY, 0, dragObject,
-                        true)) {
+
+                View dropOverView = layout.getChildAt(cellXY[0], cellXY[1]);
+                if (dropOverView instanceof FolderIcon folderIcon
+                        && mWorkspace.addToKnownFolderIfNecessary(folderIcon, dragObject, true)) {
                     return;
                 }
             } else {
