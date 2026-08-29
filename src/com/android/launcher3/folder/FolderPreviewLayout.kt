@@ -44,6 +44,8 @@ object FolderPreviewLayout {
             get() = columns * rows
     }
 
+    data class GridUsage(val hasEmptyColumns: Boolean, val hasEmptyRows: Boolean)
+
     data class Snapshot(
         val backgroundBounds: RectF,
         val overviewBounds: RectF?,
@@ -150,12 +152,10 @@ object FolderPreviewLayout {
             }
 
         val startX =
-            if (columns > 1) availableBounds.left
-            else availableBounds.centerX() - itemSize / 2f
+            if (columns > 1) availableBounds.left else availableBounds.centerX() - itemSize / 2f
 
         val startY =
-            if (rows > 1) availableBounds.top
-            else availableBounds.centerY() - itemSize / 2f
+            if (rows > 1) availableBounds.top else availableBounds.centerY() - itemSize / 2f
 
         return Grid(
             columns = columns,
@@ -178,18 +178,25 @@ object FolderPreviewLayout {
         val stepX = grid.itemSize + grid.columnGap
         val stepY = grid.itemSize + grid.rowGap
 
-        return squareBounds(
-            grid.startX + column * stepX,
-            grid.startY + row * stepY,
-            grid.itemSize,
-        )
+        return squareBounds(grid.startX + column * stepX, grid.startY + row * stepY, grid.itemSize)
     }
 
     @JvmStatic
     fun isTightlyWrapped(itemCount: Int, grid: Grid): Boolean {
-        val occupiedSlots = minOf(itemCount, grid.capacity)
+        val usage = calculateGridUsage(itemCount, grid)
+        return !usage.hasEmptyColumns && !usage.hasEmptyRows
+    }
 
-        return occupiedSlots >= grid.columns && occupiedSlots > (grid.rows - 1) * grid.columns
+    @JvmStatic
+    fun calculateGridUsage(itemCount: Int, grid: Grid): GridUsage {
+        val occupiedSlots = minOf(itemCount, grid.capacity)
+        val usedColumns = minOf(occupiedSlots, grid.columns)
+        val usedRows = (occupiedSlots + grid.columns - 1) / grid.columns
+
+        return GridUsage(
+            hasEmptyColumns = usedColumns < grid.columns,
+            hasEmptyRows = usedRows < grid.rows,
+        )
     }
 
     @JvmStatic

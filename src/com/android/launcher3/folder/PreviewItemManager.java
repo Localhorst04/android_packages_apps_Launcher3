@@ -221,6 +221,36 @@ public class PreviewItemManager {
         return FolderPreviewLayout.calculateGrid(availableBounds, itemSize, minGap);
     }
 
+    private FolderPreviewLayout.Grid calculateWorkspacePreviewGrid(
+            int availableSpaceX,
+            int availableSpaceY,
+            int spanX,
+            int spanY) {
+        Rect backgroundBounds = new Rect();
+        PreviewBackground.calculateBackgroundBounds(
+                mIcon.mActivity.getDeviceProfile(),
+                availableSpaceX,
+                availableSpaceY,
+                mIcon.getPaddingTop(),
+                spanX,
+                spanY,
+                backgroundBounds);
+        return calculateWorkspacePreviewGrid(new RectF(backgroundBounds));
+    }
+
+    FolderPreviewLayout.GridUsage calculateWorkspacePreviewGridUsage(
+            int availableSpaceX,
+            int availableSpaceY,
+            int spanX,
+            int spanY) {
+        FolderPreviewLayout.Grid grid =
+                calculateWorkspacePreviewGrid(availableSpaceX, availableSpaceY, spanX, spanY);
+
+        return FolderPreviewLayout.calculateGridUsage(
+            mIcon.mInfo.getContents().size(),
+            grid);
+    }
+
     boolean isPreviewTightlyWrapped(
             int availableSpaceX,
             int availableSpaceY,
@@ -231,18 +261,8 @@ public class PreviewItemManager {
             || spanX <= 0
             || spanY <= 0) return false;
 
-        Rect backgroundBounds = new Rect();
-        PreviewBackground.calculateBackgroundBounds(
-            mIcon.mActivity.getDeviceProfile(),
-            availableSpaceX,
-            availableSpaceY,
-            mIcon.getPaddingTop(),
-            spanX,
-            spanY,
-            backgroundBounds);
-
         FolderPreviewLayout.Grid grid =
-                calculateWorkspacePreviewGrid(new RectF(backgroundBounds));
+                calculateWorkspacePreviewGrid(availableSpaceX, availableSpaceY, spanX, spanY);
 
         return FolderPreviewLayout.isTightlyWrapped(
             mIcon.mInfo.getContents().size(),

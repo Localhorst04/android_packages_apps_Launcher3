@@ -691,6 +691,18 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         return mPreviewItemManager;
     }
 
+    public FolderPreviewLayout.GridUsage calculateWorkspacePreviewGridUsage(
+            int availableSpaceX,
+            int availableSpaceY,
+            int spanX,
+            int spanY) {
+        return mPreviewItemManager.calculateWorkspacePreviewGridUsage(
+                availableSpaceX,
+                availableSpaceY,
+                spanX,
+                spanY);
+    }
+
     public boolean isPreviewTightlyWrapped(
             int availableSpaceX,
             int availableSpaceY,

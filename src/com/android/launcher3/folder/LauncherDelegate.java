@@ -49,6 +49,10 @@ public class LauncherDelegate {
         return mLauncher.isDraggingEnabled();
     }
 
+    boolean autoShrinkFolder(FolderIcon folderIcon) {
+        return mLauncher.getWorkspace().autoShrinkFolder(folderIcon);
+    }
+
     void beginDragShared(View child, DragSource source, DragOptions options) {
         mLauncher.getWorkspace().beginDragShared(child, source, options);
     }
@@ -147,6 +151,11 @@ public class LauncherDelegate {
 
         @Override
         void beginDragShared(View child, DragSource source, DragOptions options) { }
+
+        @Override
+        boolean autoShrinkFolder(FolderIcon folderIcon) {
+            return false;
+        }
 
         @Override
         void forEachVisibleWorkspacePage(Consumer<View> callback) { }
