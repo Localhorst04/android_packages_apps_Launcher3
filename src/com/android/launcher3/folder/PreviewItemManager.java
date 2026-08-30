@@ -44,6 +44,7 @@ import android.util.Log;
 import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.android.launcher3.BubbleTextView;
@@ -290,6 +291,23 @@ public class PreviewItemManager {
                 folderColumnCount);
 
         return snapshot;
+    }
+
+    @Nullable
+    FolderPreviewLayout.ItemPlacement findDirectItemAt(float x, float y) {
+        if (!mIcon.usesWorkspacePreviewLayout() || mIntrinsicIconSize <= 0) {
+            return null;
+        }
+
+        for (FolderPreviewLayout.ItemPlacement placement
+                : calculateWorkspacePreviewSnapshot().getItems()) {
+            if (placement.getRole() == FolderPreviewLayout.ItemRole.DIRECT
+                    && placement.getBounds().contains(x, y)) {
+                return placement;
+            }
+        }
+
+        return null;
     }
 
     PreviewItemDrawingParams computePreviewItemDrawingParams(int index, int curNumItems,

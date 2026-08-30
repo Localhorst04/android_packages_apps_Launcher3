@@ -57,6 +57,7 @@ import com.android.launcher3.DropTarget.DragObject;
 import com.android.axion.blur.AxBlurColors;
 import com.android.launcher3.Launcher;
 import com.android.launcher3.LauncherSettings;
+import com.android.launcher3.LauncherState;
 import com.android.launcher3.OnAlarmListener;
 import com.android.launcher3.R;
 import com.android.launcher3.Reorderable;
@@ -85,6 +86,7 @@ import com.android.launcher3.model.data.WorkspaceItemInfo;
 import com.android.launcher3.popup.Poppable;
 import com.android.launcher3.popup.PoppableType;
 import com.android.launcher3.popup.PopupController;
+import com.android.launcher3.touch.ItemClickHandler;
 import com.android.launcher3.util.MultiTranslateDelegate;
 import com.android.launcher3.util.Themes;
 import com.android.launcher3.util.Thunk;
@@ -155,6 +157,9 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
     private Animator mDotScaleAnim;
 
     private Rect mTouchArea = new Rect();
+
+    @Nullable
+    private FolderPreviewLayout.ItemPlacement mPressedPreviewItem;
 
     private float mScaleForReorderBounce = 1f;
     private PopupController mPopupController;
@@ -268,7 +273,7 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
                         + grid.getWorkspaceIconProfile().getIconDrawablePaddingPx();
 
         icon.setTag(folderInfo);
-        icon.setOnClickListener(activity.getItemOnClickListener());
+        icon.setOnClickListener(icon::handleClick);
         icon.mInfo = folderInfo;
         icon.mActivity = activity;
         icon.mDotRenderer = grid.mDotRendererWorkSpace;
@@ -482,6 +487,22 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         } else {
             getFolder().addFolderContent(item);
         }
+    }
+
+    private void handleClick(View view) {
+        if (mPressedPreviewItem != null
+                && mPressedPreviewItem.getItem() instanceof WorkspaceItemInfo item
+                && mActivity instanceof Launcher launcher
+                && mFolder != null
+                && !mFolder.isOpen()
+                && !mFolder.isDestroyed()
+                && launcher.getWorkspace().isFinishedSwitchingState()
+                && !launcher.isInState(LauncherState.EDIT_MODE)
+                && !launcher.getDragController().isDragging()) {
+            ItemClickHandler.onClickAppShortcut(null, item, launcher);
+            return;
+        }
+        mActivity.getItemOnClickListener().onClick(view);
     }
 
     /**
@@ -866,15 +887,43 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        if (event.getAction() == MotionEvent.ACTION_DOWN
-                && shouldIgnoreTouchDown(event.getX(), event.getY())) {
-            return false;
+        int action = event.getActionMasked();
+
+        switch (action) {
+            case MotionEvent.ACTION_DOWN:
+                mPressedPreviewItem = null;
+
+                if (shouldIgnoreTouchDown(event.getX(), event.getY())) {
+                    return false;
+                }
+
+                mPressedPreviewItem =
+                        mPreviewItemManager.findDirectItemAt(event.getX(), event.getY());
+                break;
+
+            case MotionEvent.ACTION_MOVE:
+            case MotionEvent.ACTION_UP:
+                if (mPressedPreviewItem != null
+                        && !mPressedPreviewItem.getBounds().contains(
+                                event.getX(), event.getY())) {
+                    mPressedPreviewItem = null;
+                }
+                break;
+
+            case MotionEvent.ACTION_CANCEL:
+                mPressedPreviewItem = null;
+                break;
         }
 
         // Call the superclass onTouchEvent first, because sometimes it changes the state to
         // isPressed() on an ACTION_UP
         super.onTouchEvent(event);
         mLongPressHelper.onTouchEvent(event);
+
+        if (action == MotionEvent.ACTION_UP) {
+            post(() -> mPressedPreviewItem = null);
+        }
+
         // Keep receiving the rest of the events
         return true;
     }
