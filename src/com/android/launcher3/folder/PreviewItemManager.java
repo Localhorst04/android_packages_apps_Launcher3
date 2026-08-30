@@ -324,6 +324,27 @@ public class PreviewItemManager {
         return null;
     }
 
+    @Nullable
+    FolderPreviewLayout.ItemPlacement findWorkspacePreviewPlacement(
+            FolderPreviewLayout.Snapshot snapshot, ItemInfo item) {
+        for (FolderPreviewLayout.ItemPlacement placement : snapshot.getItems()) {
+            if (placement.getItem() == item) {
+                return placement;
+            }
+        }
+        return null;
+    }
+
+    void setWorkspacePreviewItemHidden(ItemInfo item, boolean hidden) {
+        for (PreviewItemDrawingParams params : mFirstPageParams) {
+            if (params.item == item) {
+                params.hidden = hidden;
+                onParamsChanged();
+                return;
+            }
+        }
+    }
+
     PreviewItemDrawingParams computePreviewItemDrawingParams(int index, int curNumItems,
             PreviewItemDrawingParams params) {
         // We use an index of -1 to represent an icon on the workspace for the destroy and
@@ -455,6 +476,98 @@ public class PreviewItemManager {
         float transY = bounds.top - mIcon.mBackground.getPreviewTop();
 
         params.update(transX, transY, scale);
+    }
+
+    private PreviewItemDrawingParams createPlacementParams(
+            FolderPreviewLayout.ItemPlacement placement) {
+        PreviewItemDrawingParams params = new PreviewItemDrawingParams(0, 0, 0);
+        applyPlacement(placement, params);
+        return params;
+    }
+
+    private void animateToPlacement(
+            PreviewItemDrawingParams params,
+            FolderPreviewLayout.ItemPlacement placement,
+            Runnable onComplete) {
+        PreviewItemDrawingParams target = createPlacementParams(placement);
+        FolderPreviewItemAnim anim = new FolderPreviewItemAnim(
+                this,
+                params,
+                target.scale,
+                target.transX,
+                target.transY,
+                DROP_IN_ANIMATION_DURATION,
+                onComplete);
+
+        if (params.anim != null) {
+            if (params.anim.hasEqualFinalState(anim)) return;
+            params.anim.cancel();
+        }
+        params.anim = anim;
+        anim.start();
+    }
+
+    @Nullable
+    private static PreviewItemDrawingParams removeParamForItem(
+            List<PreviewItemDrawingParams> params, ItemInfo item) {
+        for (int i = 0; i < params.size(); i++) {
+            if (params.get(i).item == item) {
+                return params.remove(i);
+            }
+        }
+        return null;
+    }
+
+    void animateWorkspacePreviewSnapshot(
+            FolderPreviewLayout.Snapshot oldSnapshot,
+            FolderPreviewLayout.Snapshot newSnapshot,
+            @Nullable ItemInfo droppedItem) {
+        ArrayList<PreviewItemDrawingParams> unmatchedParams = new ArrayList<>();
+
+        for (FolderPreviewLayout.ItemPlacement placement : oldSnapshot.getItems()) {
+            PreviewItemDrawingParams params = createPlacementParams(placement);
+            setDrawable(params, placement.getItem());
+            unmatchedParams.add(params);
+        }
+
+        ArrayList<PreviewItemDrawingParams> nextParams = new ArrayList<>();
+
+        for (FolderPreviewLayout.ItemPlacement placement : newSnapshot.getItems()) {
+            PreviewItemDrawingParams params =
+                    removeParamForItem(unmatchedParams, placement.getItem());
+
+            if (params == null) {
+                params = createPlacementParams(placement);
+                params.scale = 0f;
+                setDrawable(params, placement.getItem());
+            }
+
+            params.hidden = placement.getItem() == droppedItem;
+            nextParams.add(params);
+            animateToPlacement(params, placement, null);
+        }
+
+        for (PreviewItemDrawingParams params : unmatchedParams) {
+            FolderPreviewItemAnim anim = new FolderPreviewItemAnim(
+                    this,
+                    params,
+                    0f,
+                    params.transX,
+                    params.transY,
+                    DROP_IN_ANIMATION_DURATION,
+                    () -> {
+                        mFirstPageParams.remove(params);
+                        onParamsChanged();
+                    });
+
+            params.anim = anim;
+            nextParams.add(0, params);
+            anim.start();
+        }
+
+        mFirstPageParams.clear();
+        mFirstPageParams.addAll(nextParams);
+        onParamsChanged();
     }
 
     private void applySnapshot(

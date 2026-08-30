@@ -33,6 +33,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.os.Looper;
 import android.util.AttributeSet;
@@ -394,6 +395,7 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         item.cellX = -1;
         item.cellY = -1;
         DragView animateView = d.dragView;
+
         // Typically, the animateView corresponds to the DragView; however, if this is being done
         // after a configuration activity (ie. for a Shortcut being dragged from AllApps) we
         // will not have a view to animate
@@ -401,6 +403,7 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
             final Launcher launcher = (Launcher) mActivity;
             DragLayer dragLayer = launcher.getDragLayer();
             Rect to = finalRect;
+
             if (to == null) {
                 to = new Rect();
                 Workspace<?> workspace = launcher.getWorkspace();
@@ -417,45 +420,22 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
                 workspace.resetTransitionTransform();
             }
 
-            int numItemsInPreview = Math.min(MAX_NUM_ITEMS_IN_PREVIEW, index + 1);
-            boolean itemAdded = false;
-            if (itemReturnedOnFailedDrop || index >= MAX_NUM_ITEMS_IN_PREVIEW) {
-                List<ItemInfo> oldPreviewItems = new ArrayList<>(mCurrentPreviewItems);
-                getFolder().addFolderContent(item, index, false);
-                mCurrentPreviewItems.clear();
-                mCurrentPreviewItems.addAll(getPreviewItemsOnPage(0));
+            boolean usesWorkspacePreview = usesWorkspacePreviewLayout();
+            PreviewDropAnimationTarget target = usesWorkspacePreview
+                    ? prepareWorkspacePreviewDrop(item, index)
+                    : prepareLegacyPreviewDrop(
+                            item, index, itemReturnedOnFailedDrop);
 
-                if (!oldPreviewItems.equals(mCurrentPreviewItems)) {
-                    int newIndex = mCurrentPreviewItems.indexOf(item);
-                    if (newIndex >= 0) {
-                        // If the item dropped is going to be in the preview, we update the
-                        // index here to reflect its position in the preview.
-                        index = newIndex;
-                    }
+            int centerX = Math.round(
+                    scaleRelativeToDragLayer * target.centerX);
+            int centerY = Math.round(
+                    scaleRelativeToDragLayer * target.centerY);
 
-                    mPreviewItemManager.hidePreviewItem(index, true);
-                    mPreviewItemManager.onDrop(oldPreviewItems, mCurrentPreviewItems, item);
-                    itemAdded = true;
-                } else {
-                    getFolder().removeFolderContent(false, item);
-                }
-            }
+            to.offset(centerX - animateView.getMeasuredWidth() / 2,
+                    centerY - animateView.getMeasuredHeight() / 2);
 
-            if (!itemAdded) {
-                getFolder().addFolderContent(item, index, true);
-            }
-
-            int[] center = new int[2];
-            float scale = getLocalCenterForIndex(index, numItemsInPreview, center);
-            center[0] = Math.round(scaleRelativeToDragLayer * center[0]);
-            center[1] = Math.round(scaleRelativeToDragLayer * center[1]);
-
-            to.offset(center[0] - animateView.getMeasuredWidth() / 2,
-                    center[1] - animateView.getMeasuredHeight() / 2);
-
-            float finalAlpha = index < MAX_NUM_ITEMS_IN_PREVIEW ? 1f : 0f;
-
-            float finalScale = scale * scaleRelativeToDragLayer;
+            float finalScale =
+                    target.scale * scaleRelativeToDragLayer;
 
             // Account for potentially different icon sizes with non-default grid settings
             if (d.dragSource instanceof ActivityAllAppsContainerView) {
@@ -465,19 +445,19 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
                 finalScale *= containerScale;
             }
 
-            final int finalIndex = index;
-            dragLayer.animateView(animateView, to, finalAlpha,
+            dragLayer.animateView(animateView, to, target.alpha,
                     finalScale, finalScale, DROP_IN_ANIMATION_DURATION,
                     Interpolators.DECELERATE_2,
-                    () -> {
-                        mPreviewItemManager.hidePreviewItem(finalIndex, false);
-                        mFolder.showItem(item);
-                    },
+                    () -> completePreviewDropAnimation(
+                            item, target.index, usesWorkspacePreview),
                     DragLayer.ANIMATION_END_DISAPPEAR, null);
 
             mFolder.hideItem(item);
 
-            if (!itemAdded) mPreviewItemManager.hidePreviewItem(index, true);
+            if (!target.itemAdded) {
+                mPreviewItemManager.hidePreviewItem(target.index, true);
+            }
+
             d.folderNameSuggestionLoader.getSuggestedFolderName(mInfo.getAppContents(),
                     folderNameInfos -> postDelayed(() -> {
                         setLabelSuggestion(folderNameInfos, d.logInstanceId);
@@ -487,6 +467,138 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         } else {
             getFolder().addFolderContent(item);
         }
+    }
+
+    private static final class PreviewDropAnimationTarget {
+        final int centerX;
+        final int centerY;
+        final float scale;
+        final float alpha;
+        final int index;
+        final boolean itemAdded;
+
+        PreviewDropAnimationTarget(
+                int centerX, int centerY, float scale, float alpha,
+                int index, boolean itemAdded) {
+            this.centerX = centerX;
+            this.centerY = centerY;
+            this.scale = scale;
+            this.alpha = alpha;
+            this.index = index;
+            this.itemAdded = itemAdded;
+        }
+    }
+
+    private PreviewDropAnimationTarget prepareWorkspacePreviewDrop(
+            ItemInfo item, int index) {
+        FolderPreviewLayout.Snapshot oldSnapshot =
+                mPreviewItemManager.calculateWorkspacePreviewSnapshot();
+
+        getFolder().addFolderContent(item, index, false);
+
+        FolderPreviewLayout.Snapshot newSnapshot =
+                mPreviewItemManager.calculateWorkspacePreviewSnapshot();
+        mPreviewItemManager.animateWorkspacePreviewSnapshot(
+                oldSnapshot, newSnapshot, item);
+
+        FolderPreviewLayout.ItemPlacement placement =
+                mPreviewItemManager.findWorkspacePreviewPlacement(
+                        newSnapshot, item);
+
+        RectF targetBounds;
+        float targetScale;
+        float targetAlpha;
+
+        if (placement != null) {
+            targetBounds = placement.getBounds();
+            targetScale = targetBounds.width()
+                    / mPreviewItemManager.getIntrinsicIconSize();
+            targetAlpha = 1f;
+        } else {
+            targetBounds = newSnapshot.getOverviewBounds();
+            targetAlpha = 0f;
+            targetScale = calculateTargetScale(newSnapshot);
+            if (targetBounds == null) {
+                targetBounds = newSnapshot.getBackgroundBounds();
+            }
+        }
+
+        return new PreviewDropAnimationTarget(
+                Math.round(targetBounds.centerX()),
+                Math.round(targetBounds.centerY()),
+                targetScale,
+                targetAlpha,
+                index,
+                true);
+    }
+
+    private PreviewDropAnimationTarget prepareLegacyPreviewDrop(
+            ItemInfo item, int index,
+            boolean itemReturnedOnFailedDrop) {
+        int numItemsInPreview =
+                Math.min(MAX_NUM_ITEMS_IN_PREVIEW, index + 1);
+        boolean itemAdded = false;
+
+        if (itemReturnedOnFailedDrop
+                || index >= MAX_NUM_ITEMS_IN_PREVIEW) {
+            List<ItemInfo> oldPreviewItems =
+                    new ArrayList<>(mCurrentPreviewItems);
+            getFolder().addFolderContent(item, index, false);
+            mCurrentPreviewItems.clear();
+            mCurrentPreviewItems.addAll(getPreviewItemsOnPage(0));
+
+            if (!oldPreviewItems.equals(mCurrentPreviewItems)) {
+                int newIndex = mCurrentPreviewItems.indexOf(item);
+                if (newIndex >= 0) {
+                    index = newIndex;
+                }
+
+                mPreviewItemManager.hidePreviewItem(index, true);
+                mPreviewItemManager.onDrop(
+                        oldPreviewItems, mCurrentPreviewItems, item);
+                itemAdded = true;
+            } else {
+                getFolder().removeFolderContent(false, item);
+            }
+        }
+
+        if (!itemAdded) {
+            getFolder().addFolderContent(item, index, true);
+        }
+
+        int[] center = new int[2];
+        float scale = getLocalCenterForIndex(
+                index, numItemsInPreview, center);
+        float alpha =
+                index < MAX_NUM_ITEMS_IN_PREVIEW ? 1f : 0f;
+        return new PreviewDropAnimationTarget(
+                center[0], center[1], scale, alpha, index, itemAdded);
+    }
+
+    private float calculateTargetScale(
+            FolderPreviewLayout.Snapshot snapshot) {
+        for (FolderPreviewLayout.ItemPlacement candidate
+                : snapshot.getItems()) {
+            if (candidate.getRole()
+                    == FolderPreviewLayout.ItemRole.OVERVIEW) {
+                return candidate.getBounds().width()
+                        / mPreviewItemManager.getIntrinsicIconSize();
+            }
+        }
+        return 0f;
+    }
+
+    private void completePreviewDropAnimation(
+            ItemInfo item, int index,
+            boolean usesWorkspacePreview) {
+        if (usesWorkspacePreview) {
+            mPreviewItemManager.setWorkspacePreviewItemHidden(
+                    item, false);
+        } else {
+            mPreviewItemManager.hidePreviewItem(index, false);
+        }
+
+        mFolder.showItem(item);
     }
 
     private void handleClick(View view) {
