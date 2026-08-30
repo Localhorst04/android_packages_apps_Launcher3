@@ -162,6 +162,9 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
     @Nullable
     private FolderPreviewLayout.ItemPlacement mPressedPreviewItem;
 
+    @Nullable
+    private PreviewItemLaunchSource mPreviewItemLaunchSource;
+
     private float mScaleForReorderBounce = 1f;
     private PopupController mPopupController;
 
@@ -601,6 +604,156 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         mFolder.showItem(item);
     }
 
+    private final class PreviewItemLaunchSource extends BubbleTextView {
+
+        @Nullable
+        private ItemInfo mItem;
+        private boolean mIsAppCloseSource;
+
+        PreviewItemLaunchSource(Context context) {
+            super(context);
+            setWillNotDraw(true);
+            setClickable(false);
+            setFocusable(false);
+            setImportantForAccessibility(
+                    IMPORTANT_FOR_ACCESSIBILITY_NO);
+            setVisibility(INVISIBLE);
+        }
+
+        void prepare(ItemInfo item, RectF bounds) {
+            resetLaunchSource();
+
+            mItem = item;
+            applyFromWorkspaceItem((WorkspaceItemInfo) item);
+
+            int left = Math.round(bounds.left);
+            int top = Math.round(bounds.top);
+            int width = Math.max(1, Math.round(bounds.right) - left);
+            int height = Math.max(1, Math.round(bounds.bottom) - top);
+
+            FrameLayout.LayoutParams lp =
+                    (FrameLayout.LayoutParams) getLayoutParams();
+            lp.width = width;
+            lp.height = height;
+            lp.leftMargin = left - FolderIcon.this.getPaddingLeft();
+            lp.topMargin = top - FolderIcon.this.getPaddingTop();
+            setLayoutParams(lp);
+
+            layout(left, top, left + width, top + height);
+            setVisibility(VISIBLE);
+        }
+
+        void prepare(FolderPreviewLayout.ItemPlacement placement) {
+            prepare(placement.getItem(), placement.getBounds());
+        }
+
+        @Override
+        public void setIconVisible(boolean visible) {
+            if (mItem == null) return;
+
+            if (!visible) {
+                mPreviewItemManager.setWorkspacePreviewItemHidden(
+                        mItem, true);
+            } else if (mIsAppCloseSource) {
+                resetLaunchSource();
+            } else {
+                mPreviewItemManager.setWorkspacePreviewItemHidden(
+                        mItem, false);
+            }
+        }
+
+        @Override
+        public void setForceHideDot(boolean hide) {
+            // The proxy has no notification dot.
+        }
+
+        @Override
+        public void onDraw(Canvas canvas) {
+            // This view only supplies launch geometry and icon data.
+        }
+
+        @Override
+        public void getIconBounds(Rect outBounds) {
+            outBounds.set(0, 0, getWidth(), getHeight());
+        }
+
+        private void resetLaunchSource() {
+            if (mItem != null) {
+                mPreviewItemManager.setWorkspacePreviewItemHidden(
+                        mItem, false);
+            }
+
+            mItem = null;
+            mIsAppCloseSource = false;
+            super.reset();
+            setVisibility(INVISIBLE);
+        }
+
+        void prepareForAppClose(
+                ItemInfo item, RectF bounds) {
+            prepare(item, bounds);
+            mIsAppCloseSource = true;
+        }
+    }
+
+    private View preparePreviewItemLaunchSource(
+            FolderPreviewLayout.ItemPlacement placement) {
+        if (mPreviewItemLaunchSource == null) {
+            mPreviewItemLaunchSource =
+                    new PreviewItemLaunchSource(getContext());
+            addView(mPreviewItemLaunchSource,
+                    new FrameLayout.LayoutParams(0, 0));
+        }
+
+        mPreviewItemLaunchSource.prepare(placement);
+        return mPreviewItemLaunchSource;
+    }
+
+    @Nullable
+    public View getPreviewItemLaunchSourceForAppClose(
+            Predicate<ItemInfo> matcher) {
+        ItemInfo item = null;
+        for (ItemInfo candidate : mInfo.getContents()) {
+            if (matcher.test(candidate)) {
+                item = candidate;
+                break;
+            }
+        }
+
+        if (item == null) return null;
+
+        FolderPreviewLayout.Snapshot snapshot =
+                mPreviewItemManager.calculateWorkspacePreviewSnapshot();
+        FolderPreviewLayout.ItemPlacement placement =
+                mPreviewItemManager.findWorkspacePreviewPlacement(
+                        snapshot, item);
+
+        RectF targetBounds;
+        if (placement != null) {
+            targetBounds = placement.getBounds();
+        } else {
+            RectF overviewBounds = snapshot.getOverviewBounds();
+            if (overviewBounds == null) return null;
+
+            targetBounds = new RectF(
+                overviewBounds.centerX(),
+                overviewBounds.centerY(),
+                overviewBounds.centerX(),
+                overviewBounds.centerY());
+        }
+
+        if (mPreviewItemLaunchSource == null) {
+            mPreviewItemLaunchSource =
+                    new PreviewItemLaunchSource(getContext());
+            addView(mPreviewItemLaunchSource,
+                    new FrameLayout.LayoutParams(0, 0));
+        }
+
+        mPreviewItemLaunchSource.prepareForAppClose(
+                item, targetBounds);
+        return mPreviewItemLaunchSource;
+    }
+
     private void handleClick(View view) {
         if (mPressedPreviewItem != null
                 && mPressedPreviewItem.getItem() instanceof WorkspaceItemInfo item
@@ -611,7 +764,9 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
                 && launcher.getWorkspace().isFinishedSwitchingState()
                 && !launcher.isInState(LauncherState.EDIT_MODE)
                 && !launcher.getDragController().isDragging()) {
-            ItemClickHandler.onClickAppShortcut(null, item, launcher);
+            View launchSource =
+                    preparePreviewItemLaunchSource(mPressedPreviewItem);
+            ItemClickHandler.onClickAppShortcut(launchSource, item, launcher);
             return;
         }
         mActivity.getItemOnClickListener().onClick(view);

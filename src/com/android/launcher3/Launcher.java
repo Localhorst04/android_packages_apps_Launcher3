@@ -2471,10 +2471,25 @@ public class Launcher extends StatefulActivity<LauncherState>
         LauncherBindableItemsContainer visibleContainer =
                 op -> mapOverCellLayouts(containerArray, op);
 
-        // Order: Preferred item by itself or in folder, then by matching package/user
-        return visibleContainer.getFirstMatch(
+        // Order: Preferred item by itself or in folder, then by matching package/user.
+        View target = visibleContainer.getFirstMatch(
                 preferredItem, forFolderMatch(preferredItem),
                 packageAndUserAndApp, forFolderMatch(packageAndUserAndApp));
+
+        if (!(target instanceof FolderIcon folderIcon)) {
+            return target;
+        }
+
+        View previewItem =
+                folderIcon.getPreviewItemLaunchSourceForAppClose(
+                        preferredItem);
+        if (previewItem == null) {
+            previewItem =
+                    folderIcon.getPreviewItemLaunchSourceForAppClose(
+                            packageAndUserAndApp);
+        }
+
+        return previewItem != null ? previewItem : target;
     }
 
     private ValueAnimator createNewAppBounceAnimation(View v, int i) {
