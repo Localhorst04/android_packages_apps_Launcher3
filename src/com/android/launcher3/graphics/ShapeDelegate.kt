@@ -145,7 +145,8 @@ interface ShapeDelegate {
             endRadius: Float,
             isReversed: Boolean,
         ): ValueAnimator where T : View, T : ClipPathView {
-            val startRadius = (startRect.width() / 2f) * radiusRatio
+            val startRadius =
+                minOf(startRect.width(), startRect.height()) / 2f * radiusRatio
             val pathProvider = { progress: Float, path: Path ->
                 val radius = (1 - progress) * startRadius + progress * endRadius
                 path.addRoundRect(

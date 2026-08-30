@@ -243,6 +243,10 @@ public class PreviewBackground extends DelegatedCellDrawing {
         outBounds.set(mBackgroundBounds);
     }
 
+    void getScaledBounds(RectF outBounds) {
+        outBounds.set(getBoundsAtScale(mScale));
+    }
+
     private RectF getBoundsAtScale(float scale) {
         float centerX = mBackgroundBounds.exactCenterX();
         float centerY = mBackgroundBounds.exactCenterY();

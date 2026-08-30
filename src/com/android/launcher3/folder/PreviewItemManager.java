@@ -113,6 +113,7 @@ public class PreviewItemManager {
     // do not get cropped in their resting state.
     private final float mClipThreshold;
     private float mCurrentPageItemsTransX = 0;
+    private float mPageSlideDistance;
     private boolean mShouldSlideInFirstPage;
 
     static final int INITIAL_ITEM_ANIMATION_DURATION = 350;
@@ -120,7 +121,6 @@ public class PreviewItemManager {
 
     private static final int SLIDE_IN_FIRST_PAGE_ANIMATION_DURATION_DELAY = 100;
     private static final int SLIDE_IN_FIRST_PAGE_ANIMATION_DURATION = 300;
-    private static final int ITEM_SLIDE_IN_OUT_DISTANCE_PX = 200;
 
     public PreviewItemManager(FolderIcon icon) {
         mContext = icon.getContext();
@@ -270,27 +270,41 @@ public class PreviewItemManager {
             grid);
     }
 
-    private FolderPreviewLayout.Snapshot calculateWorkspacePreviewSnapshot() {
+    FolderPreviewLayout.Snapshot calculateWorkspacePreviewSnapshot() {
+        return calculateWorkspacePreviewSnapshot(mIcon.mInfo.getContents());
+    }
+
+    FolderPreviewLayout.Snapshot calculateWorkspacePreviewSnapshotForPage(int page) {
+        List<View> pageViews = mIcon.getFolder().getItemsOnPage(page);
+        List<ItemInfo> pageItems = new ArrayList<>(pageViews.size());
+
+        for (View view : pageViews) {
+            pageItems.add((ItemInfo) view.getTag());
+        }
+
+        return calculateWorkspacePreviewSnapshot(pageItems);
+    }
+
+    private FolderPreviewLayout.Snapshot calculateWorkspacePreviewSnapshot(
+            List<ItemInfo> items) {
         Rect backgroundBounds = new Rect();
         mIcon.mBackground.getBounds(backgroundBounds);
 
         RectF snapshotBounds = new RectF(backgroundBounds);
         FolderPreviewLayout.Grid grid =
-            calculateWorkspacePreviewGrid(snapshotBounds);
+                calculateWorkspacePreviewGrid(snapshotBounds);
 
         int folderColumnCount = mIcon.mActivity.getDeviceProfile()
                 .getFolderProfile().getNumColumns();
         boolean isRtl = Utilities.isRtl(mIcon.getResources());
 
-        FolderPreviewLayout.Snapshot snapshot = FolderPreviewLayout.calculateSnapshot(
-                mIcon.mInfo.getContents(),
+        return FolderPreviewLayout.calculateSnapshot(
+                items,
                 snapshotBounds,
                 grid,
                 mIntrinsicIconSize,
                 isRtl,
                 folderColumnCount);
-
-        return snapshot;
     }
 
     @Nullable
@@ -355,14 +369,16 @@ public class PreviewItemManager {
         if (mShouldSlideInFirstPage) {
             PointF firstPageOffset = new PointF(bg.getPreviewLeft() + mCurrentPageItemsTransX,
                     bg.getPreviewTop());
-            boolean shouldClip = mCurrentPageItemsTransX > mClipThreshold;
+            boolean shouldClip =
+                    Math.abs(mCurrentPageItemsTransX) > mClipThreshold;
+
             drawParams(canvas, mCurrentPageParams, firstPageOffset, shouldClip, clipPath);
-            firstPageItemsTransX = -ITEM_SLIDE_IN_OUT_DISTANCE_PX + mCurrentPageItemsTransX;
+            firstPageItemsTransX = -mPageSlideDistance + mCurrentPageItemsTransX;
         }
 
         PointF firstPageOffset = new PointF(bg.getPreviewLeft() + firstPageItemsTransX,
                 bg.getPreviewTop());
-        boolean shouldClipFirstPage = firstPageItemsTransX < -mClipThreshold;
+        boolean shouldClipFirstPage = Math.abs(firstPageItemsTransX) > mClipThreshold;
         drawParams(canvas, mFirstPageParams, firstPageOffset, shouldClipFirstPage, clipPath);
         canvas.restoreToCount(saveCount);
     }
@@ -464,8 +480,11 @@ public class PreviewItemManager {
     }
 
     void buildParamsForPage(int page, ArrayList<PreviewItemDrawingParams> params, boolean animate) {
-        if (page == 0 && mIcon.usesWorkspacePreviewLayout() && mIntrinsicIconSize > 0) {
-            applySnapshot(calculateWorkspacePreviewSnapshot(), params);
+        if (mIcon.usesWorkspacePreviewLayout() && mIntrinsicIconSize > 0) {
+            FolderPreviewLayout.Snapshot snapshot = page == 0
+                    ? calculateWorkspacePreviewSnapshot()
+                    : calculateWorkspacePreviewSnapshotForPage(page);
+            applySnapshot(snapshot, params);
             return;
         }
 
@@ -510,12 +529,19 @@ public class PreviewItemManager {
         // out, and animate the first page preview items in.
         mShouldSlideInFirstPage = currentPage != 0;
         if (mShouldSlideInFirstPage) {
+            Rect backgroundBounds = new Rect();
+            mIcon.mBackground.getBounds(backgroundBounds);
+
+            float slideDirection =
+                    Utilities.isRtl(mIcon.getResources()) ? -1f : 1f;
+            mPageSlideDistance = backgroundBounds.width() * slideDirection;
+
             mCurrentPageItemsTransX = 0;
             buildParamsForPage(currentPage, mCurrentPageParams, false);
             onParamsChanged();
 
             ValueAnimator slideAnimator = ObjectAnimator
-                    .ofFloat(this, CURRENT_PAGE_ITEMS_TRANS_X, 0, ITEM_SLIDE_IN_OUT_DISTANCE_PX);
+                    .ofFloat(this, CURRENT_PAGE_ITEMS_TRANS_X, 0f, mPageSlideDistance);
             slideAnimator.addListener(new AnimatorListenerAdapter() {
                 @Override
                 public void onAnimationEnd(Animator animation) {
