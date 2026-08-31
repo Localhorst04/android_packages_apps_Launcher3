@@ -310,6 +310,15 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         Utilities.scaleRectAboutCenter(outBounds, ICON_OVERLAP_FACTOR);
     }
 
+    public void getPreviewBackgroundPath(Path outPath) {
+        mPreviewItemManager.recomputePreviewDrawingParams();
+        mBackground.getDrawnShapePath(outPath);
+    }
+
+    public boolean isPreviewBackgroundAnimating() {
+        return mBackground.isBoundsAnimating();
+    }
+
     public float getBackgroundStrokeWidth() {
         return mBackground.getStrokeWidth();
     }

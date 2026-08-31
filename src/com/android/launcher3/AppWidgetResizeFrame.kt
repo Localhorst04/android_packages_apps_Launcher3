@@ -22,8 +22,12 @@ import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Point
 import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
 import android.view.KeyEvent
@@ -45,6 +49,8 @@ import com.android.launcher3.dragndrop.DragController
 import com.android.launcher3.dragndrop.DragLayer
 import com.android.launcher3.dragndrop.DragOptions
 import com.android.launcher3.folder.FolderIcon
+import com.android.launcher3.graphics.ShapeDelegate
+import com.android.launcher3.graphics.ThemeManager
 import com.android.launcher3.keyboard.ViewGroupFocusHelper
 import com.android.launcher3.logging.InstanceIdSequence
 import com.android.launcher3.logging.StatsLogManager.LauncherEvent
@@ -145,7 +151,7 @@ private class WidgetResizeTarget(
 }
 
 private class FolderResizeTarget(
-    private val folderIcon: FolderIcon,
+    val folderIcon: FolderIcon,
     private val workspace: Workspace<*>,
     allowedSizes: List<Point>,
 ) : ResizeTarget {
@@ -221,6 +227,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val backgroundPadding: Int
     private val touchTargetWidth: Int
 
+    private val folderResizeOutlinePath = Path()
+    private val folderResizeOutlineBounds = RectF()
+    private val folderResizeOutlinePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val folderResizeHandlePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    private val folderResizeHandleTouchRect = Rect()
+    private val folderResizeHandleTouchRadius: Float
+    private val folderResizeHandlePath = Path()
+    private val folderResizeHandleLength: Float
+
     private val directionVector = IntArray(2)
     private val lastDirectionVector = IntArray(2)
 
@@ -271,6 +287,32 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         backgroundPadding = resources.getDimensionPixelSize(R.dimen.resize_frame_background_padding)
         touchTargetWidth = 2 * backgroundPadding
+
+        folderResizeHandleTouchRadius =
+            resources.getDimension(R.dimen.folder_resize_handle_touch_size) / 2f
+
+        folderResizeHandleLength =
+            resources.getDimension(R.dimen.folder_resize_handle_length)
+
+        folderResizeOutlinePaint.apply {
+            style = Paint.Style.STROKE
+            strokeWidth =
+                resources.getDimension(R.dimen.folder_resize_outline_stroke_width)
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+            color = context.getColor(R.color.materialColorPrimary)
+        }
+
+        folderResizeHandlePaint.apply {
+            style = Paint.Style.STROKE
+            strokeWidth =
+                resources.getDimension(
+                    R.dimen.folder_resize_handle_stroke_width)
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+            color = context.getColor(R.color.materialColorPrimary)
+        }
+
         firstFrameAnimatorHelper = FirstFrameAnimatorHelper(this)
         systemGestureExclusionRectsHolder = List(HANDLE_COUNT) { Rect() }
 
@@ -297,15 +339,83 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         super.onLayout(changed, l, t, r, b)
-        dragHandles.all.forEachIndexed { index, view ->
-            systemGestureExclusionRectsHolder[index].set(
-                view.left,
-                view.top,
-                view.right,
-                view.bottom,
+
+        val folderTarget =
+            if (::resizeTarget.isInitialized) {
+                resizeTarget as? FolderResizeTarget
+            } else {
+                null
+            }
+
+        if (folderTarget != null) {
+            updateFolderResizeGeometry(folderTarget.folderIcon)
+            systemGestureExclusionRectsHolder.forEach { it.setEmpty() }
+            systemGestureExclusionRectsHolder[0].set(
+                folderResizeHandleTouchRect
             )
+        } else {
+            dragHandles.all.forEachIndexed { index, view ->
+                systemGestureExclusionRectsHolder[index].set(
+                    view.left,
+                    view.top,
+                    view.right,
+                    view.bottom,
+                )
+            }
         }
-        systemGestureExclusionRects = systemGestureExclusionRectsHolder
+
+        systemGestureExclusionRects =
+            systemGestureExclusionRectsHolder
+    }
+
+    override fun dispatchDraw(canvas: Canvas) {
+        super.dispatchDraw(canvas)
+
+        if (!::resizeTarget.isInitialized) return
+        val folderTarget =
+            resizeTarget as? FolderResizeTarget ?: return
+
+        updateFolderResizeGeometry(folderTarget.folderIcon)
+        val offset = backgroundPadding.toFloat()
+
+        canvas.save()
+        canvas.translate(offset, offset)
+
+        canvas.drawPath(
+            folderResizeOutlinePath,
+            folderResizeOutlinePaint,
+        )
+        canvas.drawPath(
+            folderResizeHandlePath,
+            folderResizeHandlePaint,
+        )
+
+        canvas.restore()
+
+        if (folderTarget.folderIcon.isPreviewBackgroundAnimating) {
+            postInvalidateOnAnimation()
+        }
+    }
+
+    private fun updateFolderResizeGeometry(folderIcon: FolderIcon) {
+        folderIcon.getPreviewBackgroundPath(folderResizeOutlinePath)
+        folderResizeOutlinePath.computeBounds(
+            folderResizeOutlineBounds,
+            true,
+        )
+
+        val folderShape = ThemeManager.INSTANCE[context].folderShape
+        val cornerRadius =
+            if (folderShape is ShapeDelegate.RoundedSquare) {
+                min(
+                    folderResizeOutlineBounds.width(),
+                    folderResizeOutlineBounds.height(),
+                ) / 2f * folderShape.radiusRatio
+            } else {
+                0f
+            }
+
+        updateFolderResizeHandlePath(cornerRadius)
     }
 
     private fun setCornerRadiusFromWidget(widgetView: LauncherAppWidgetHostView) {
@@ -317,6 +427,79 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     gradientDrawable.cornerRadius = widgetView.enforcedCornerRadius
                 }
             }
+        }
+    }
+
+    private fun updateFolderResizeHandlePath(cornerRadius: Float) {
+        val right = folderResizeOutlineBounds.right
+        val bottom = folderResizeOutlineBounds.bottom
+        val halfLength = folderResizeHandleLength / 2f
+
+        folderResizeHandlePath.reset()
+
+        val centerInset =
+            cornerRadius * CORNER_MIDPOINT_INSET_FACTOR
+        val centerX =
+            backgroundPadding + right - centerInset
+        val centerY =
+            backgroundPadding + bottom - centerInset
+
+        folderResizeHandleTouchRect.set(
+            Math.round(centerX - folderResizeHandleTouchRadius),
+            Math.round(centerY - folderResizeHandleTouchRadius),
+            Math.round(centerX + folderResizeHandleTouchRadius),
+            Math.round(centerY + folderResizeHandleTouchRadius),
+        )
+
+        if (cornerRadius == 0f) {
+            folderResizeHandlePath.moveTo(right, bottom - halfLength)
+            folderResizeHandlePath.lineTo(right, bottom)
+            folderResizeHandlePath.lineTo(right - halfLength, bottom)
+            return
+        }
+
+        val quarterArcLength =
+            Math.PI.toFloat() * cornerRadius / 2f
+        val cornerBounds =
+            RectF(
+                right - 2f * cornerRadius,
+                bottom - 2f * cornerRadius,
+                right,
+                bottom,
+            )
+
+        if (folderResizeHandleLength <= quarterArcLength) {
+            val halfSweep =
+                Math.toDegrees(
+                    (halfLength / cornerRadius).toDouble()
+                ).toFloat()
+
+            folderResizeHandlePath.arcTo(
+                cornerBounds,
+                45f - halfSweep,
+                2f * halfSweep,
+            )
+        } else {
+            val straightLength =
+                (folderResizeHandleLength - quarterArcLength) / 2f
+
+            folderResizeHandlePath.moveTo(
+                right,
+                bottom - cornerRadius - straightLength,
+            )
+            folderResizeHandlePath.lineTo(
+                right,
+                bottom - cornerRadius,
+            )
+            folderResizeHandlePath.arcTo(
+                cornerBounds,
+                0f,
+                90f,
+            )
+            folderResizeHandlePath.lineTo(
+                right - cornerRadius - straightLength,
+                bottom,
+            )
         }
     }
 
@@ -414,13 +597,33 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             )
 
         setupForTarget(target, cellLayout, dragLayer)
+        findViewById<View>(R.id.widget_resize_frame).visibility =
+            View.INVISIBLE
+        dragHandles.all.forEach { it.visibility = View.INVISIBLE }
+
+        alpha =
+            if (ignoreCurrentTouchSequence) {
+                DIMMED_ALPHA
+            } else {
+                VISIBLE_ALPHA
+            }
     }
 
-    /**
-     * Identifies the handle from which user is trying to resize; if none, returns false.
-     * Additionally, evaluates & saves the resize bounds / ranges necessary for the active resize.
-     */
-    private fun beginResizeIfPointInRegion(x: Int, y: Int): Boolean {
+    private fun updateActiveResizeBorders(x: Int, y: Int) {
+        val folderTarget = resizeTarget as? FolderResizeTarget
+        if (folderTarget != null) {
+            updateFolderResizeGeometry(folderTarget.folderIcon)
+
+            val handleActive =
+                folderResizeHandleTouchRect.contains(x, y)
+
+            isLeftBorderActive = false
+            isRightBorderActive = handleActive
+            isTopBorderActive = false
+            isBottomBorderActive = handleActive
+            return
+        }
+
         isLeftBorderActive =
             resizeTarget.canResizeFromLeft &&
                 x < touchTargetWidth
@@ -431,6 +634,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 y < touchTargetWidth + topTouchRegionAdjustment
         isBottomBorderActive =
             y > height - touchTargetWidth + bottomTouchRegionAdjustment
+    }
+
+    /**
+     * Identifies the handle from which user is trying to resize; if none, returns false.
+     * Additionally, evaluates & saves the resize bounds / ranges necessary for the active resize.
+     */
+    private fun beginResizeIfPointInRegion(x: Int, y: Int): Boolean {
+        updateActiveResizeBorders(x, y)
 
         val anyBordersActive =
             isLeftBorderActive || isRightBorderActive || isTopBorderActive || isBottomBorderActive
@@ -848,6 +1059,17 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     override fun onControllerInterceptTouchEvent(ev: MotionEvent): Boolean {
         if (ignoreCurrentTouchSequence) {
+            if (
+                ev.action == MotionEvent.ACTION_UP ||
+                    ev.action == MotionEvent.ACTION_CANCEL
+            ) {
+                animate()
+                    .alpha(VISIBLE_ALPHA)
+                    .setDuration(SNAP_DURATION_MS.toLong())
+                    .start()
+                ignoreCurrentTouchSequence = false
+            }
+
             if (ev.action != MotionEvent.ACTION_DOWN) return false
             ignoreCurrentTouchSequence = false
         }
@@ -938,6 +1160,21 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             cellLayout.isDragOverlapping = shouldShowCellLayoutBorder
             pairedCellLayout.isDragOverlapping = shouldShowCellLayoutBorder
         }
+    }
+
+    private fun revealFolderResizeFrameWhenTouchEnds() {
+        if (!ignoreCurrentTouchSequence) return
+
+        if (launcher.isTouchInProgress) {
+            postOnAnimation(::revealFolderResizeFrameWhenTouchEnds)
+            return
+        }
+
+        ignoreCurrentTouchSequence = false
+        animate()
+            .alpha(VISIBLE_ALPHA)
+            .setDuration(SNAP_DURATION_MS.toLong())
+            .start()
     }
 
     override fun isOfType(type: Int): Boolean = (type and TYPE_WIDGET_RESIZE_FRAME) != 0
@@ -1072,6 +1309,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         private const val SPRING_LOADED_PROGRESS_MAX = 1f
 
         private const val RESIZE_THRESHOLD = 0.66f
+        private const val CORNER_MIDPOINT_INSET_FACTOR = 0.29289323f
 
         // Reusable static objects pre-initialized for temporary usage.
         private val TempRect = Rect()
@@ -1161,7 +1399,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             dragLayer.addView(frame)
             frame.mIsOpen = true
 
-            frame.post { frame.snapToTarget(false) }
+            frame.post {
+                frame.snapToTarget(false)
+                frame.revealFolderResizeFrameWhenTouchEnds()
+            }
         }
 
         private fun getSpanIncrement(deltaFrac: Float): Int {
