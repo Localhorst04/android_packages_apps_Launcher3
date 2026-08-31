@@ -72,6 +72,12 @@ private interface ResizeTarget {
     val maxSpanY: Int
     val visualScale: Float
 
+    val canResizeFromLeft: Boolean
+        get() = true
+
+    val canResizeFromTop: Boolean
+        get() = true
+
     fun canResizeTo(cellX: Int, cellY: Int, spanX: Int, spanY: Int): Boolean
 
     fun onResizeApplied(spanX: Int, spanY: Int, committed: Boolean)
@@ -167,6 +173,8 @@ private class FolderResizeTarget(
     override val maxSpanX: Int = supportedSizes.maxOf { it.x }
     override val maxSpanY: Int = supportedSizes.maxOf { it.y }
     override val visualScale: Float = 1f
+    override val canResizeFromLeft: Boolean = false
+    override val canResizeFromTop: Boolean = false
 
     override fun canResizeTo(cellX: Int, cellY: Int, spanX: Int, spanY: Int): Boolean {
         val isInitialGeometry =
@@ -413,10 +421,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
      * Additionally, evaluates & saves the resize bounds / ranges necessary for the active resize.
      */
     private fun beginResizeIfPointInRegion(x: Int, y: Int): Boolean {
-        isLeftBorderActive = (x < touchTargetWidth)
-        isRightBorderActive = (x > width - touchTargetWidth)
-        isTopBorderActive = (y < touchTargetWidth + topTouchRegionAdjustment)
-        isBottomBorderActive = (y > height - touchTargetWidth + bottomTouchRegionAdjustment)
+        isLeftBorderActive =
+            resizeTarget.canResizeFromLeft &&
+                x < touchTargetWidth
+        isRightBorderActive =
+            x > width - touchTargetWidth
+        isTopBorderActive =
+            resizeTarget.canResizeFromTop &&
+                y < touchTargetWidth + topTouchRegionAdjustment
+        isBottomBorderActive =
+            y > height - touchTargetWidth + bottomTouchRegionAdjustment
 
         val anyBordersActive =
             isLeftBorderActive || isRightBorderActive || isTopBorderActive || isBottomBorderActive

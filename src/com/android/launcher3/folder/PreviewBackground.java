@@ -24,6 +24,7 @@ import static com.android.launcher3.icons.GraphicsUtils.setColorAlphaBound;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
+import android.animation.RectEvaluator;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.TypedArray;
@@ -109,6 +110,7 @@ public class PreviewBackground extends DelegatedCellDrawing {
     @VisibleForTesting protected ValueAnimator mScaleAnimator;
     private ObjectAnimator mStrokeAlphaAnimator;
     private ObjectAnimator mShadowAnimator;
+    private ValueAnimator mBoundsAnimator;
 
     @VisibleForTesting protected boolean mIsAccepting;
     @VisibleForTesting protected boolean mIsHovered;
@@ -243,6 +245,38 @@ public class PreviewBackground extends DelegatedCellDrawing {
         outBounds.set(mBackgroundBounds);
     }
 
+    void animateBoundsFrom(Rect startBounds, long duration) {
+        if (mBoundsAnimator != null) {
+            mBoundsAnimator.cancel();
+        }
+
+        Rect endBounds = new Rect(mBackgroundBounds);
+        if (startBounds.equals(endBounds)) return;
+
+        ValueAnimator animator = ValueAnimator.ofObject(
+                new RectEvaluator(new Rect()),
+                new Rect(startBounds),
+                endBounds);
+        mBoundsAnimator = animator;
+        mBackgroundBounds.set(startBounds);
+
+        animator.addUpdateListener(animation -> {
+            mBackgroundBounds.set(
+                    (Rect) animation.getAnimatedValue());
+            invalidate();
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                if (mBoundsAnimator == animation) {
+                    mBoundsAnimator = null;
+                }
+            }
+        });
+        animator.setDuration(duration);
+        animator.start();
+    }
+
     void getScaledBounds(RectF outBounds) {
         outBounds.set(getBoundsAtScale(mScale));
     }
@@ -313,6 +347,10 @@ public class PreviewBackground extends DelegatedCellDrawing {
         return LauncherPrefsExt.LAUNCHER_BLUR_ENABLED.get(mContext)
                 ? AxBlurColors.surfaceEffect0(mContext)
                 : mBgColor;
+    }
+
+    boolean isBoundsAnimating() {
+        return mBoundsAnimator != null;
     }
 
     public void drawBackground(Canvas canvas) {

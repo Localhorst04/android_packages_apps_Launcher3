@@ -162,16 +162,34 @@ public class PreviewItemManager {
         }
     }
 
-    private void computePreviewDrawingParams(int drawableSize, int totalWidth, int totalHeight) {
+    private void computePreviewDrawingParams(
+            int drawableSize, int totalWidth, int totalHeight) {
         int spanX = mIcon.getCurrentSpanX();
         int spanY = mIcon.getCurrentSpanY();
 
-        if (mIntrinsicIconSize != drawableSize
-                || mTotalWidth != totalWidth
-                || mTotalHeight != totalHeight
-                || mPrevSpanX != spanX
-                || mPrevSpanY != spanY
-                || mPrevTopPadding != mIcon.getPaddingTop()) {
+        boolean geometryChanged =
+                mTotalWidth != totalWidth
+                        || mTotalHeight != totalHeight
+                        || mPrevSpanX != spanX
+                        || mPrevSpanY != spanY
+                        || mPrevTopPadding != mIcon.getPaddingTop();
+
+        if (mIntrinsicIconSize != drawableSize || geometryChanged) {
+            boolean animateResize =
+                    geometryChanged
+                            && mIntrinsicIconSize > 0
+                            && !mFirstPageParams.isEmpty()
+                            && mIcon.usesWorkspacePreviewLayout();
+
+            Rect previousBackgroundBounds = null;
+            FolderPreviewLayout.Snapshot previousSnapshot = null;
+
+            if (animateResize) {
+                previousBackgroundBounds = new Rect();
+                mIcon.mBackground.getBounds(previousBackgroundBounds);
+                previousSnapshot = calculateWorkspacePreviewSnapshot();
+            }
+
             mIntrinsicIconSize = drawableSize;
             mTotalWidth = totalWidth;
             mTotalHeight = totalHeight;
@@ -190,11 +208,23 @@ public class PreviewItemManager {
                     spanY);
 
             mIcon.mPreviewLayoutRule.init(
-                    mIcon.mBackground.previewSize, mIntrinsicIconSize,
+                    mIcon.mBackground.previewSize,
+                    mIntrinsicIconSize,
                     Utilities.isRtl(mIcon.getResources()),
-                    mIcon.mActivity.getDeviceProfile().getFolderProfile().getNumColumns()
-            );
-            updatePreviewItems(false);
+                    mIcon.mActivity.getDeviceProfile()
+                            .getFolderProfile()
+                            .getNumColumns());
+
+            if (animateResize) {
+                FolderPreviewLayout.Snapshot newSnapshot =
+                        calculateWorkspacePreviewSnapshot();
+                animateWorkspacePreviewResize(previousSnapshot, newSnapshot);
+                mIcon.mBackground.animateBoundsFrom(
+                        previousBackgroundBounds,
+                        DROP_IN_ANIMATION_DURATION);
+            } else {
+                updatePreviewItems(false);
+            }
         }
     }
 
@@ -386,6 +416,7 @@ public class PreviewItemManager {
         // The items are drawn in coordinates relative to the preview offset
         PreviewBackground bg = mIcon.getFolderBackground();
         Path clipPath = bg.getClipPath();
+        boolean shouldClipResize = bg.isBoundsAnimating();
         float firstPageItemsTransX = 0;
         if (mShouldSlideInFirstPage) {
             PointF firstPageOffset = new PointF(bg.getPreviewLeft() + mCurrentPageItemsTransX,
@@ -393,14 +424,27 @@ public class PreviewItemManager {
             boolean shouldClip =
                     Math.abs(mCurrentPageItemsTransX) > mClipThreshold;
 
-            drawParams(canvas, mCurrentPageParams, firstPageOffset, shouldClip, clipPath);
+            drawParams(
+                    canvas,
+                    mCurrentPageParams,
+                    firstPageOffset,
+                    shouldClip || shouldClipResize,
+                    clipPath);
+
             firstPageItemsTransX = -mPageSlideDistance + mCurrentPageItemsTransX;
         }
 
         PointF firstPageOffset = new PointF(bg.getPreviewLeft() + firstPageItemsTransX,
                 bg.getPreviewTop());
-        boolean shouldClipFirstPage = Math.abs(firstPageItemsTransX) > mClipThreshold;
-        drawParams(canvas, mFirstPageParams, firstPageOffset, shouldClipFirstPage, clipPath);
+        boolean shouldClipFirstPage =
+                shouldClipResize
+                        || Math.abs(firstPageItemsTransX) > mClipThreshold;
+        drawParams(
+                canvas,
+                mFirstPageParams,
+                firstPageOffset,
+                shouldClipFirstPage,
+                clipPath);
         canvas.restoreToCount(saveCount);
     }
 
@@ -485,6 +529,27 @@ public class PreviewItemManager {
         return params;
     }
 
+    private PreviewItemDrawingParams createCollapsedParams(
+            FolderPreviewLayout.Snapshot snapshot) {
+        RectF collapseBounds = snapshot.getOverviewBounds();
+        if (collapseBounds == null) {
+            collapseBounds = snapshot.getBackgroundBounds();
+        }
+
+        RectF backgroundBounds = snapshot.getBackgroundBounds();
+        float previewLeft =
+                backgroundBounds.centerX()
+                        - mIcon.mBackground.previewSize / 2f;
+        float previewTop =
+                backgroundBounds.centerY()
+                        - mIcon.mBackground.previewSize / 2f;
+
+        return new PreviewItemDrawingParams(
+                collapseBounds.centerX() - previewLeft,
+                collapseBounds.centerY() - previewTop,
+                0f);
+    }
+
     private void animateToPlacement(
             PreviewItemDrawingParams params,
             FolderPreviewLayout.ItemPlacement placement,
@@ -530,30 +595,61 @@ public class PreviewItemManager {
             unmatchedParams.add(params);
         }
 
-        ArrayList<PreviewItemDrawingParams> nextParams = new ArrayList<>();
+        animateWorkspacePreviewParams(
+                unmatchedParams,
+                newSnapshot,
+                droppedItem,
+                true,
+                null);
+    }
 
-        for (FolderPreviewLayout.ItemPlacement placement : newSnapshot.getItems()) {
+    private void animateWorkspacePreviewParams(
+            ArrayList<PreviewItemDrawingParams> unmatchedParams,
+            FolderPreviewLayout.Snapshot newSnapshot,
+            @Nullable ItemInfo hiddenItem,
+            boolean updateHiddenState,
+            @Nullable FolderPreviewLayout.Snapshot resizeStartSnapshot) {
+        ArrayList<PreviewItemDrawingParams> nextParams =
+                new ArrayList<>();
+
+        for (FolderPreviewLayout.ItemPlacement placement
+                : newSnapshot.getItems()) {
             PreviewItemDrawingParams params =
-                    removeParamForItem(unmatchedParams, placement.getItem());
+                    removeParamForItem(
+                            unmatchedParams, placement.getItem());
 
             if (params == null) {
-                params = createPlacementParams(placement);
+                params = resizeStartSnapshot == null
+                        ? createPlacementParams(placement)
+                        : createCollapsedParams(resizeStartSnapshot);
                 params.scale = 0f;
                 setDrawable(params, placement.getItem());
             }
 
-            params.hidden = placement.getItem() == droppedItem;
+            if (updateHiddenState) {
+                params.hidden = placement.getItem() == hiddenItem;
+            }
             nextParams.add(params);
             animateToPlacement(params, placement, null);
         }
 
         for (PreviewItemDrawingParams params : unmatchedParams) {
+            float exitTransX = params.transX;
+            float exitTransY = params.transY;
+
+            if (resizeStartSnapshot != null) {
+                PreviewItemDrawingParams collapsed =
+                        createCollapsedParams(newSnapshot);
+                exitTransX = collapsed.transX;
+                exitTransY = collapsed.transY;
+            }
+
             FolderPreviewItemAnim anim = new FolderPreviewItemAnim(
                     this,
                     params,
                     0f,
-                    params.transX,
-                    params.transY,
+                    exitTransX,
+                    exitTransY,
                     DROP_IN_ANIMATION_DURATION,
                     () -> {
                         mFirstPageParams.remove(params);
@@ -568,6 +664,17 @@ public class PreviewItemManager {
         mFirstPageParams.clear();
         mFirstPageParams.addAll(nextParams);
         onParamsChanged();
+    }
+
+    private void animateWorkspacePreviewResize(
+            FolderPreviewLayout.Snapshot oldSnapshot,
+            FolderPreviewLayout.Snapshot newSnapshot) {
+        animateWorkspacePreviewParams(
+                new ArrayList<>(mFirstPageParams),
+                newSnapshot,
+                null,
+                false,
+                oldSnapshot);
     }
 
     private void applySnapshot(
