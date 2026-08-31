@@ -1257,7 +1257,7 @@ public class Folder extends AbstractFloatingView implements ClipPathView, DragSo
             mInfo.setOption(FolderInfo.FLAG_MULTI_PAGE_ANIMATION, false,
                     mActivityContext.getModelWriter());
         }
-        maybeApplyAutoShrink();
+        mFolderIcon.post(this::maybeApplyAutoShrink);
     }
 
     private void updateItemLocationsInDatabaseBatch(boolean isBind) {
@@ -1691,6 +1691,7 @@ public class Folder extends AbstractFloatingView implements ClipPathView, DragSo
         int itemCount = getItemCount();
         if (mDestroyed || itemCount <= 1 || itemCount >= previousItemCount) return;
 
+        mFolderIcon.syncPreviewItems();
         mLauncherDelegate.autoShrinkFolder(mFolderIcon);
     }
 

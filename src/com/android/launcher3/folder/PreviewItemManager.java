@@ -391,6 +391,9 @@ public class PreviewItemManager {
         final float scale = iconSize / mReferenceDrawable.getIntrinsicWidth();
         final float trans = (mIcon.mBackground.previewSize - iconSize) / 2;
 
+        if (params == null) {
+            params = new PreviewItemDrawingParams(0, 0, 0);
+        }
         params.update(trans, trans, scale);
         return params;
     }

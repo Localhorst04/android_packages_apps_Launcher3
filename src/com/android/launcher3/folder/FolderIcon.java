@@ -1140,6 +1140,10 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         mCurrentPreviewItems.addAll(getPreviewItemsOnPage(0));
     }
 
+    void syncPreviewItems() {
+        updatePreviewItems(false);
+    }
+
     /**
      * Updates the preview items which match the provided condition
      */
