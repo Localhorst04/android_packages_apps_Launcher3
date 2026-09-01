@@ -1023,7 +1023,7 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         if (canBlur && getLayerType() != View.LAYER_TYPE_HARDWARE) {
             mBackground.getDrawnShapePath(mBlurPath);
             drewBlur = getBlurSurface().drawPath(canvas, mBlurPath,
-                    mBackground.getScaledRadius());
+                    mBackground.getDrawnCornerRadius());
         } else if (canBlur) {
             postInvalidateOnAnimation();
         }
