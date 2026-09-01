@@ -1144,6 +1144,11 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         updatePreviewItems(false);
     }
 
+    public void onPreviewSettingsChanged() {
+        updatePreviewItems(false);
+        invalidate();
+    }
+
     /**
      * Updates the preview items which match the provided condition
      */

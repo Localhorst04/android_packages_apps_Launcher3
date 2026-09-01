@@ -56,6 +56,7 @@ import com.android.launcher3.apppairs.AppPairIconDrawingParams;
 import com.android.launcher3.apppairs.AppPairIconGraphic;
 import com.android.launcher3.folder.AxFolderExt;
 import com.android.launcher3.model.data.AppPairInfo;
+import com.android.launcher3.model.data.FolderPreviewSettings;
 import com.android.launcher3.model.data.ItemInfo;
 import com.android.launcher3.model.data.ItemInfoWithIcon;
 import com.android.launcher3.model.data.WorkspaceItemInfo;
@@ -233,17 +234,19 @@ public class PreviewItemManager {
         Resources resources = mContext.getResources();
 
         float itemScale =
-                resources.getFloat(R.dimen.folder_workspace_preview_item_scale);
+                FolderPreviewSettings.getItemScale(resources, mIcon.mInfo);
         float padding =
-                resources.getDimension(R.dimen.folder_workspace_preview_padding);
+                FolderPreviewSettings.getPadding(resources, mIcon.mInfo);
         float minGap =
-                resources.getDimension(R.dimen.folder_workspace_preview_min_gap);
+                FolderPreviewSettings.getMinimumGap(resources, mIcon.mInfo);
 
         RectF availableBounds = new RectF(backgroundBounds);
         availableBounds.inset(padding, padding);
 
+        float defaultPadding =
+                resources.getDimension(R.dimen.folder_workspace_preview_padding);
         float baseContentSize =
-                mIcon.mActivity.getDeviceProfile().folderIconSizePx - 2 * padding;
+                mIcon.mActivity.getDeviceProfile().folderIconSizePx - 2 * defaultPadding;
 
         float maxItemSize =
                 Math.min(availableBounds.width(), availableBounds.height());
