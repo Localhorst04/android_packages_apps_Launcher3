@@ -49,8 +49,6 @@ import com.android.launcher3.dragndrop.DragController
 import com.android.launcher3.dragndrop.DragLayer
 import com.android.launcher3.dragndrop.DragOptions
 import com.android.launcher3.folder.FolderIcon
-import com.android.launcher3.graphics.ShapeDelegate
-import com.android.launcher3.graphics.ThemeManager
 import com.android.launcher3.keyboard.ViewGroupFocusHelper
 import com.android.launcher3.logging.InstanceIdSequence
 import com.android.launcher3.logging.StatsLogManager.LauncherEvent
@@ -404,16 +402,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             true,
         )
 
-        val folderShape = ThemeManager.INSTANCE[context].folderShape
         val cornerRadius =
-            if (folderShape is ShapeDelegate.RoundedSquare) {
-                min(
-                    folderResizeOutlineBounds.width(),
-                    folderResizeOutlineBounds.height(),
-                ) / 2f * folderShape.radiusRatio
-            } else {
-                0f
-            }
+            folderIcon.previewBackgroundCornerRadius
 
         updateFolderResizeHandlePath(cornerRadius)
     }

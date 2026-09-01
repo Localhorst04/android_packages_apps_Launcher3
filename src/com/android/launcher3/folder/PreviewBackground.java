@@ -376,12 +376,67 @@ public class PreviewBackground extends DelegatedCellDrawing {
         mPaint.setColor(colorOverride);
 
         RectF bounds = getBoundsAtScale(mScale);
-        getShape().drawShapeInBounds(canvas, bounds, mPaint);
+        drawShapeInBounds(canvas, bounds, mScale, mPaint);
         drawShadow(canvas);
     }
 
     private ShapeDelegate getShape() {
         return ThemeManager.INSTANCE.get(mContext).getFolderShape();
+    }
+
+    private float getCornerRadius(
+            ShapeDelegate shape,
+            RectF bounds,
+            float scale) {
+        if (!(shape instanceof ShapeDelegate.RoundedSquare roundedSquare)) {
+            return 0f;
+        }
+
+        if (shape instanceof ShapeDelegate.Circle) {
+            return Math.min(bounds.width(), bounds.height()) / 2f;
+        }
+
+        float fixedRadius =
+                previewSize / 2f * roundedSquare.getRadiusRatio() * scale;
+        return Math.min(
+                fixedRadius,
+                Math.min(bounds.width(), bounds.height()) / 2f);
+    }
+
+    private void drawShapeInBounds(
+            Canvas canvas,
+            RectF bounds,
+            float scale,
+            Paint paint) {
+        ShapeDelegate shape = getShape();
+
+        if (shape instanceof ShapeDelegate.RoundedSquare) {
+            float radius = getCornerRadius(shape, bounds, scale);
+            canvas.drawRoundRect(bounds, radius, radius, paint);
+        } else {
+            shape.drawShapeInBounds(canvas, bounds, paint);
+        }
+    }
+
+    private void addShapeToPathInBounds(
+            Path path,
+            RectF bounds,
+            float scale) {
+        ShapeDelegate shape = getShape();
+
+        if (shape instanceof ShapeDelegate.RoundedSquare) {
+            float radius = getCornerRadius(shape, bounds, scale);
+            path.addRoundRect(bounds, radius, radius, Path.Direction.CW);
+        } else {
+            shape.addToPathInBounds(path, bounds);
+        }
+    }
+
+    float getDrawnCornerRadius() {
+        return getCornerRadius(
+                getShape(),
+                getBoundsAtScale(mScale),
+                mScale);
     }
 
     public void drawShadow(Canvas canvas) {
@@ -474,7 +529,7 @@ public class PreviewBackground extends DelegatedCellDrawing {
 
         RectF bounds = getBoundsAtScale(mScale);
         bounds.inset(1f, 1f);
-        getShape().drawShapeInBounds(canvas, bounds, mPaint);
+        drawShapeInBounds(canvas, bounds, mScale, mPaint);
     }
 
     /**
@@ -485,7 +540,7 @@ public class PreviewBackground extends DelegatedCellDrawing {
         mPaint.setColor(color);
 
         RectF bounds = getBoundsAtScale(0.5f);
-        getShape().drawShapeInBounds(canvas, bounds, mPaint);
+        drawShapeInBounds(canvas, bounds, 0.5f, mPaint);
     }
 
     public Path getClipPath() {
@@ -497,13 +552,13 @@ public class PreviewBackground extends DelegatedCellDrawing {
         }
 
         RectF bounds = getBoundsAtScale(scale);
-        getShape().addToPathInBounds(mPath, bounds);
+        addShapeToPathInBounds(mPath, bounds, scale);
         return mPath;
     }
 
     public void getDrawnShapePath(Path out) {
         out.reset();
-        getShape().addToPathInBounds(out, getBoundsAtScale(mScale));
+        addShapeToPathInBounds(out, getBoundsAtScale(mScale), mScale);
     }
 
     private void delegateDrawing(CellLayout delegate, int cellX, int cellY) {

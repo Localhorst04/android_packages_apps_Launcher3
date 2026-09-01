@@ -323,6 +323,10 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         return mBackground.getStrokeWidth();
     }
 
+    public float getPreviewBackgroundCornerRadius() {
+        return mBackground.getDrawnCornerRadius();
+    }
+
     public Folder getFolder() {
         return mFolder;
     }
