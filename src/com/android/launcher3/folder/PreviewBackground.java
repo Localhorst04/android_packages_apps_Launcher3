@@ -79,6 +79,7 @@ public class PreviewBackground extends DelegatedCellDrawing {
     private final Matrix mShaderMatrix = new Matrix();
     private final Path mPath = new Path();
     private final Rect mBackgroundBounds = new Rect();
+    private final Rect mTargetBackgroundBounds = new Rect();
     private final RectF mScaledBackgroundBounds = new RectF();
 
     private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -224,6 +225,7 @@ public class PreviewBackground extends DelegatedCellDrawing {
             spanX,
             spanY,
             mBackgroundBounds);
+        mTargetBackgroundBounds.set(mBackgroundBounds);
 
         // Stroke width is 1dp
         mStrokeWidth = context.getResources().getDisplayMetrics().density;
@@ -243,6 +245,18 @@ public class PreviewBackground extends DelegatedCellDrawing {
 
     void getBounds(Rect outBounds) {
         outBounds.set(mBackgroundBounds);
+    }
+
+    void getTargetBounds(Rect outBounds) {
+        outBounds.set(mTargetBackgroundBounds);
+    }
+
+    int getTargetPreviewLeft() {
+        return mTargetBackgroundBounds.centerX() - previewSize / 2;
+    }
+
+    int getTargetPreviewTop() {
+        return mTargetBackgroundBounds.centerY() - previewSize / 2;
     }
 
     void animateBoundsFrom(Rect startBounds, long duration) {

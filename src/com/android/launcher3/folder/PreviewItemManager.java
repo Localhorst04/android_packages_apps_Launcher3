@@ -321,7 +321,7 @@ public class PreviewItemManager {
     private FolderPreviewLayout.Snapshot calculateWorkspacePreviewSnapshot(
             List<ItemInfo> items) {
         Rect backgroundBounds = new Rect();
-        mIcon.mBackground.getBounds(backgroundBounds);
+        mIcon.mBackground.getTargetBounds(backgroundBounds);
 
         RectF snapshotBounds = new RectF(backgroundBounds);
         FolderPreviewLayout.Grid grid =
@@ -522,8 +522,8 @@ public class PreviewItemManager {
         RectF bounds = placement.getBounds();
 
         float scale = bounds.width() / mIntrinsicIconSize;
-        float transX = bounds.left - mIcon.mBackground.getPreviewLeft();
-        float transY = bounds.top - mIcon.mBackground.getPreviewTop();
+        float transX = bounds.left - mIcon.mBackground.getTargetPreviewLeft();
+        float transY = bounds.top - mIcon.mBackground.getTargetPreviewTop();
 
         params.update(transX, transY, scale);
     }
@@ -688,7 +688,7 @@ public class PreviewItemManager {
             ArrayList<PreviewItemDrawingParams> params) {
         List<FolderPreviewLayout.ItemPlacement> placements = snapshot.getItems();
 
-        for (PreviewItemDrawingParams drawingParams : params) {
+        for (PreviewItemDrawingParams drawingParams : new ArrayList<>(params)) {
             if (drawingParams.anim != null) {
                 drawingParams.anim.cancel();
             }
