@@ -80,6 +80,16 @@ interface ShapeDelegate {
         isReversed: Boolean,
     ): ValueAnimator where T : View, T : ClipPathView
 
+    fun <T> createRevealAnimator(
+        target: T,
+        startRect: Rect,
+        endRect: Rect,
+        startRadius: Float,
+        endRadius: Float,
+        isReversed: Boolean,
+    ): ValueAnimator where T : View, T : ClipPathView =
+        createRevealAnimator(target, startRect, endRect, endRadius, isReversed)
+
     class Circle : RoundedSquare(1f) {
 
         override fun drawShape(
@@ -144,9 +154,24 @@ interface ShapeDelegate {
             endRect: Rect,
             endRadius: Float,
             isReversed: Boolean,
+        ): ValueAnimator where T : View, T : ClipPathView =
+            createRevealAnimator(
+                target,
+                startRect,
+                endRect,
+                minOf(startRect.width(), startRect.height()) / 2f * radiusRatio,
+                endRadius,
+                isReversed,
+            )
+
+        override fun <T> createRevealAnimator(
+            target: T,
+            startRect: Rect,
+            endRect: Rect,
+            startRadius: Float,
+            endRadius: Float,
+            isReversed: Boolean,
         ): ValueAnimator where T : View, T : ClipPathView {
-            val startRadius =
-                minOf(startRect.width(), startRect.height()) / 2f * radiusRatio
             val pathProvider = { progress: Float, path: Path ->
                 val radius = (1 - progress) * startRadius + progress * endRadius
                 path.addRoundRect(

@@ -1969,14 +1969,10 @@ public class Folder extends AbstractFloatingView implements ClipPathView, DragSo
             mClipPath.computeBounds(mBlurBounds, false);
             float minDim = Math.min(mBlurBounds.width(), mBlurBounds.height());
             float fullMin = Math.min(getWidth(), getHeight());
-            float iconRadius = mFolderIcon != null
-                    ? mFolderIcon.mBackground.getScaledRadius() : 0f;
-            float iconMin = iconRadius * 2f;
-            ShapeDelegate shape =
-                    ThemeManager.INSTANCE.get(getContext()).getFolderShape();
-            float shapeRatio = shape instanceof ShapeDelegate.RoundedSquare
-                    ? ((ShapeDelegate.RoundedSquare) shape).getRadiusRatio() : 1f;
-            float collapsedRadius = iconRadius * shapeRatio;
+            float iconMin = mFolderIcon != null
+                    ? mFolderIcon.mBackground.getScaledRadius() * 2f : 0f;
+            float collapsedRadius = mFolderIcon != null
+                    ? mFolderIcon.getPreviewBackgroundCornerRadius() : 0f;
             float progress = fullMin - iconMin > 1f
                     ? (fullMin - minDim) / (fullMin - iconMin) : 0f;
             progress = Math.max(0f, Math.min(1f, progress));

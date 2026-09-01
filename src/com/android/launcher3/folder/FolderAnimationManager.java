@@ -219,6 +219,8 @@ public class FolderAnimationManager implements FolderAnimationCreator {
                 Math.round((totalOffsetX + initialBackgroundWidth)),
                 Math.round((paddingOffsetY + initialBackgroundHeight)));
         Rect endRect = new Rect(0, 0, lp.width, lp.height);
+        float initialRadius = mPreviewBackground.getDrawnCornerRadius()
+                * scaleRelativeToDragLayer;
         float finalRadius = mFolderBackground.getCornerRadius();
 
         // Create the animators.
@@ -264,7 +266,7 @@ public class FolderAnimationManager implements FolderAnimationCreator {
         ShapeDelegate shapeDelegate = ThemeManager.INSTANCE.get(mContext).getFolderShape();
         // Create reveal animator for the folder background
         play(a, shapeDelegate.createRevealAnimator(
-                mFolder, startRect, endRect, finalRadius, !mIsOpening));
+                mFolder, startRect, endRect, initialRadius, finalRadius, !mIsOpening));
 
         int page = mIsOpening ? mContent.getCurrentPage() : mContent.getDestinationPage();
         if (Utilities.isRtl(mContext.getResources())) {
